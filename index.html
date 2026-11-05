@@ -435,7 +435,7 @@ body.is-pro .probadge { display: none; }
         </span>
       </button>
       <div class="how">
-        <div><i>1</i><b>Add a video</b><span>Whisper writes the words, on your phone</span></div>
+        <div><i>1</i><b>Add a video</b><span>Cool Caps writes the words for you, right on your phone</span></div>
         <div><i>2</i><b>Style it</b><span>Animation, font, effects</span></div>
         <div><i>3</i><b>Export</b><span>Ready to post</span></div>
       </div>
@@ -1402,7 +1402,7 @@ function buildSettings() {
     if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Sure?"; return; }
     await LIB.clear().catch(() => {}); b.dataset.sure = ""; b.textContent = "Clear"; toast("Library cleared"); loadRecent();
   };
-  $("#stWhisper").innerHTML = '<span class="ok">Whisper runs on this phone</span>';
+  $("#stWhisper").innerHTML = '<span class="ok">Runs right on this phone</span>';
   $("#stFfmpeg").innerHTML = '<span class="ok">Built into Chrome</span>';
   $("#stFonts").textContent = `${INFO.fonts.length} fonts`;
   $("#stVer").textContent = "Version " + (INFO.version || "1");
@@ -1598,8 +1598,8 @@ self.onmessage = async (e) => {
         if (!asr) throw err;
       }
       current = model; device = dev;
-      postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
     }
+    postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
     let lang = language;
     if (!lang) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); if (lang) postMessage({ type: "detected", lang }); }
     postMessage({ type: "stage" });
@@ -1633,6 +1633,8 @@ self.onmessage = async (e) => {
     postMessage({ type: "done", words });
   } catch (err) { postMessage({ type: "error", message: String((err && err.message) || err) }); }
 };`;
+// first-time guesses: seconds of work per second of video (replaced by this phone's real speed after one run)
+const GUESS_RATE = { "base|webgpu": 0.12, "small|webgpu": 0.2, "medium|webgpu": 0.55, "base|wasm": 0.3, "small|wasm": 0.6, "medium|wasm": 1.8 };
 const MODELS = { base: "onnx-community/whisper-tiny_timestamped", small: "onnx-community/whisper-base_timestamped", medium: "onnx-community/whisper-small_timestamped" };
 let asrWorker = null;
 function getWorker() {
@@ -1654,7 +1656,14 @@ function transcribe(audio, onStatus) {
   detectedLang = "";
   if (FAKE) return fetch("words.json").then((r) => r.json());
   return new Promise((resolve, reject) => {
-    const w = getWorker(), files = {}, t0 = performance.now(); let timer = null, tStage = t0, engine = "phone";
+    const w = getWorker(), files = {}, t0 = performance.now(), len = audio.length / 16000;
+    let timer = null, tStage = t0, engine = "phone", devKind = "wasm", rateKey = "", est = 0, done = 0;
+    const tick = () => {
+      const el2 = (performance.now() - tStage) / 1000, left = est - el2;
+      const pct = Math.max(done, Math.min(0.97, est ? el2 / est : 0));
+      onStatus({ pct, stage: "Transcribing your video" + (detectedLang ? " · " + langName(detectedLang) : ""),
+        note: (done >= 1 ? "Finishing up…" : left > 1.5 ? `About ${secsText(left)} left` : "Almost done…") + ` · using your ${engine}` });
+    };
     const finish = () => { clearInterval(timer); w.onmessage = null; w.onerror = null; };
     w.onmessage = (e) => {
       const m = e.data;
@@ -1668,18 +1677,24 @@ function transcribe(audio, onStatus) {
       } else if (m.type === "detecting") onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
       else if (m.type === "detected") { detectedLang = m.lang; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
       else if (m.type === "warn") console.warn(m.message);
-      else if (m.type === "device") engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
+      else if (m.type === "device") devKind = m.device, engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
       else if (m.type === "chunk") {
-        clearInterval(timer); timer = null;
-        const el2 = (performance.now() - tStage) / 1000, left = m.done > 0.02 ? el2 / m.done - el2 : null;
-        onStatus({ pct: m.done, stage: "Transcribing" + (detectedLang ? " · " + langName(detectedLang) : ""), note: m.done >= 1 ? "Finishing up…" : left != null ? `About ${left < 60 ? Math.max(1, Math.round(left)) + " s" : Math.round(left / 60) + " min"} left · using your ${engine}` : `Using your ${engine}` });
+        // real progress: re-estimate the total time from how fast the finished pieces went
+        const el2 = (performance.now() - tStage) / 1000;
+        done = m.done; if (done > 0.02 && done < 1) est = el2 / done;
+        tick();
       }
-      else if (m.type === "loading") onStatus({ pct: null, stage: "Starting Whisper", note: "Getting the speech model ready on your phone." });
+      else if (m.type === "loading") onStatus({ pct: null, stage: "Getting ready", note: "Warming up the speech engine on your phone." });
       else if (m.type === "stage") {
-        const len = audio.length / 16000; tStage = performance.now();
-        const tick = () => onStatus({ pct: null, stage: "Transcribing" + (detectedLang ? " · " + langName(detectedLang) : ""), note: `Whisper is listening on your phone · ${Math.round((performance.now() - t0) / 1000)}s (video is ${Math.round(len)}s)` });
+        tStage = performance.now();
+        rateKey = (APP.model || "small") + "|" + devKind;
+        est = Math.max(3, len * (Number(store.get("coolcaps.rate." + rateKey)) || GUESS_RATE[rateKey] || 0.6));
         tick(); timer = setInterval(tick, 1000);
-      } else if (m.type === "done") { finish(); resolve(splitLongWords(m.words)); }
+      } else if (m.type === "done") {
+        // remember how fast this phone is, so next time's estimate is spot on
+        if (len > 5) store.set("coolcaps.rate." + rateKey, +(((performance.now() - tStage) / 1000) / len).toFixed(3));
+        finish(); resolve(splitLongWords(m.words));
+      }
       else if (m.type === "error") { finish(); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
     };
     w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
@@ -1714,7 +1729,7 @@ async function startFile(file) {
   keepAwake(false);
   if (my !== token) return;
   ws = (ws || []).filter((w) => String(w.word).trim());
-  if (!ws.length) return setWorking(true, { stage: "No words found", note: "Whisper couldn't hear any speech in this video.", error: true });
+  if (!ws.length) return setWorking(true, { stage: "No words found", note: "Couldn't hear any speech in this video.", error: true });
   onTranscribed({ ...meta, words: ws });
 }
 let currentFile = null;
