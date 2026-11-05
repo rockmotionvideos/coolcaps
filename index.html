@@ -304,6 +304,17 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 .tag.f { background: var(--raised-2); color: var(--muted); border: 1px solid var(--line-2); }
 .tag.pro { background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; }
 .probadge { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 2px 6px; border-radius: 6px; font: 800 9px/1.3 var(--ui); letter-spacing: .06em; background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; box-shadow: 0 4px 10px -4px rgba(0,0,0,.6); }
+.pwprice { display: flex; align-items: baseline; gap: 10px; }
+.pwprice b { font-size: 44px; font-weight: 400; line-height: 1; }
+.pwprice span { color: var(--muted, #9a9a9a); font-size: 14px; }
+.pwkey { display: flex; flex-direction: column; gap: 10px; }
+.pwkey[hidden] { display: none; }
+.pwmsg.bad { color: #FF6B81; }
+.linkbtn { background: none; border: 0; color: inherit; opacity: .7; font: 600 15px var(--ui); padding: 6px; cursor: pointer; }
+.sheet .fine { font-size: 12px; opacity: .55; margin: 0; text-align: center; }
+.minipro { display: none; font: 800 8px/1 var(--ui); letter-spacing: .05em; margin-left: 5px; padding: 2px 4px; border-radius: 4px; vertical-align: 2px; font-style: normal; background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; }
+.locked .minipro { display: inline-block; }
+body.is-pro .probadge { display: none; }
 .sheet.pw { gap: 14px; }
 .sheet.pw .tag { align-self: flex-start; }
 .sheet.pw h3 { font-size: 40px; line-height: .95; font-weight: 400; }
@@ -385,6 +396,9 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 .result h2 { margin: 0; font-size: 46px; line-height: .95; }
 .fname { font: 12px var(--mono); color: var(--muted); word-break: break-all; margin: 0; }
 .e-num { font-size: 110px; line-height: .9; color: var(--accent); }
+.e-left { margin-top: 10px; font-weight: 700; font-size: 18px; }
+.e-stage { margin: 0; font-weight: 700; font-size: 15px; text-align: center; }
+.e-note { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; text-align: center; }
 
 .guide { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 12px); z-index: 5; padding: 16px; border-radius: 22px; background: var(--text); color: var(--bg); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 50px -14px rgba(0,0,0,.85); animation: rise .35s cubic-bezier(.2,1.2,.4,1); }
 .guide > b { font-size: 17px; }
@@ -411,7 +425,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
     </header>
     <div class="scroll">
       <h1 class="hello display">What are we captioning <span class="hl">today?</span></h1>
-      <p class="lede">Animated captions for Reels, TikTok and Shorts. Everything happens on your phone.</p>
+      <p class="lede">Animated captions for your short videos. Everything happens on your phone.</p>
       <button class="hero-card footage" id="heroCard">
         <span class="hero-tag" id="heroTag"><span>Style</span>karaoke</span>
         <span class="cap-layer" id="heroCaps"></span>
@@ -497,7 +511,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
           <div class="row stack">
             <div class="rhead"><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg></span>
               <span class="rt"><b>Video quality</b><span id="qNote"></span></span></div>
-            <div class="seg" id="qSeg"><button data-v="standard">Standard</button><button data-v="high">High</button><button data-v="max">Max</button></div>
+            <div class="seg" id="qSeg"><button data-v="standard">Standard</button><button data-v="high">High</button><button data-v="max" id="qMax">Max<i class="minipro">PRO</i></button></div>
           </div>
           <div class="row">
             <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></span>
@@ -678,7 +692,29 @@ let fontsVersion = 0;
 /* ===================== caption engine =====================
    Everything is drawn on a canvas, in video pixels, by drawFrame(). The live preview, the demo
    cards and the export all call it, so the exported video matches the preview exactly. */
-const SENTENCE_END = /[.!?…]$/, SOFT_BREAK = /[,;:]$/;
+const SENTENCE_END = /[.!?…。！？؟।]$/, SOFT_BREAK = /[,;:，、；：،]$/;
+// Scripts written without spaces between words (Chinese, Japanese, Thai, Lao, Burmese, Khmer, Tibetan)
+const NOSPACE_RE = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u0f00-\u0fff]/;
+// Right-to-left scripts (Hebrew, Arabic, Persian, Urdu, Syriac, Thaana…)
+const RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
+const isNoSpace = (g) => g.length > 0 && g.filter((w) => NOSPACE_RE.test(w.word)).length * 2 >= g.length;
+const isRTL = (g) => g.length > 0 && g.filter((w) => RTL_RE.test(w.word)).length * 2 >= g.length;
+// Whisper sometimes hands back a whole Chinese/Japanese/Thai phrase as one "word".
+// Split long ones into small pieces with timings shared out, so words-per-screen still works.
+function splitLongWords(words) {
+  const out = [];
+  for (const w of words) {
+    const chars = [...w.word];
+    if (!NOSPACE_RE.test(w.word) || chars.length <= 4) { out.push(w); continue; }
+    const n = Math.ceil(chars.length / 2), dur = Math.max(0.05, w.end - w.start);
+    for (let i = 0; i < n; i++) {
+      let piece = chars.slice(i * 2, i * 2 + 2).join("");
+      if (i === n - 2 && chars.length - (i + 1) * 2 === 1) { piece = chars.slice(i * 2).join(""); out.push({ ...w, word: piece, start: w.start + dur * i / n, end: w.end }); break; }
+      out.push({ ...w, word: piece, start: w.start + dur * i / n, end: w.start + dur * (i + 1) / n });
+    }
+  }
+  return out;
+}
 function groupWords(words, per, smart, gap) {
   const ws = words.map((w) => ({ ...w })), groups = []; let cur = [];
   for (let i = 0; i < ws.length; i++) {
@@ -722,10 +758,67 @@ const STYLE_GROUPS = [
 const KIN = STYLE_GROUPS[2][2];
 const ALL_STYLES = Object.assign({}, ...STYLE_GROUPS.map((g) => g[2]));
 const NO_HL = new Set(["fade", "plain", "blur"]);
-// Free vs Pro. Flip LOCK_PRO to true once payments are added: Pro styles then open the upgrade screen.
-const LOCK_PRO = false;
+/* ===================== Free vs Pro =====================
+   Paste your Lemon Squeezy checkout link into CHECKOUT_URL. Until it's filled in, the buy button
+   says "coming soon" but license keys can still be entered. PRODUCT_ID (optional) makes sure a key
+   belongs to Cool Caps Pro and not some other product in your store. */
+const LOCK_PRO = true;
+const CHECKOUT_URL = "";            // e.g. "https://coolcaps.lemonsqueezy.com/buy/xxxxxxxx"
+const PRODUCT_ID = 0;              // your Lemon Squeezy product id, 0 = don't check
+const PRO_PRICE = "A$7.99";        // shown on the upgrade screen
+const PRO_PRICE_NOTE = "one-time · yours forever";
+const LS_API = "https://api.lemonsqueezy.com/v1/licenses/";
 const PRO = new Set([...Object.keys(STYLE_GROUPS[1][2]), ...Object.keys(KIN)]);
-const isLocked = (style) => LOCK_PRO && PRO.has(style);
+const LIC_KEY = "coolcaps.pro";
+let LIC = (() => { try { return JSON.parse(localStorage.getItem(LIC_KEY)) || null; } catch { return null; } })();
+const isPro = () => !LOCK_PRO || !!(LIC && LIC.ok);
+const isLocked = (style) => !isPro() && PRO.has(style);
+function saveLic(v) { LIC = v; try { v ? localStorage.setItem(LIC_KEY, JSON.stringify(v)) : localStorage.removeItem(LIC_KEY); } catch {} }
+async function lsCall(action, fields) {
+  const r = await fetch(LS_API + action, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields) });
+  return r.json();
+}
+async function activateKey(raw) {
+  const key = raw.trim();
+  if (!/^[A-Za-z0-9-]{16,}$/.test(key)) throw new Error("That doesn't look like a license key. Copy it from your receipt email.");
+  let d;
+  try { d = await lsCall("activate", { license_key: key, instance_name: "Cool Caps phone " + new Date().toISOString().slice(0, 10) }); }
+  catch { throw new Error("Couldn't reach the license server. Check your internet and try again."); }
+  if (!d || !d.activated) {
+    const m = (d && d.error) || "";
+    if (/limit/i.test(m)) throw new Error("This key is already used on the maximum number of phones. Remove it from an old phone first.");
+    throw new Error(m ? "That key didn't work: " + m : "That key didn't work. Check it and try again.");
+  }
+  if (PRODUCT_ID && d.meta && d.meta.product_id !== PRODUCT_ID) throw new Error("That key is for a different product.");
+  saveLic({ key, instance: d.instance && d.instance.id, ok: true, email: d.meta && d.meta.customer_email, checked: Date.now() });
+}
+async function recheckLicense() {
+  // Re-check about once a week so refunded keys stop working. Offline? Pro stays on.
+  if (!LIC || !LIC.ok || Date.now() - (LIC.checked || 0) < 7 * 864e5) return;
+  try {
+    const d = await lsCall("validate", { license_key: LIC.key, ...(LIC.instance ? { instance_id: LIC.instance } : {}) });
+    if (d && d.valid === false && !/rate|too many/i.test(d.error || "")) { saveLic(null); toast("Your Pro key is no longer active, so Pro was turned off.", true); refreshPlan(); }
+    else if (d && d.valid) saveLic({ ...LIC, checked: Date.now() });
+  } catch {}
+}
+async function removeKey() {
+  if (LIC && LIC.instance) { try { await lsCall("deactivate", { license_key: LIC.key, instance_id: LIC.instance }); } catch {} }
+  saveLic(null);
+}
+const maskKey = (k) => k ? k.slice(0, 4) + "••••" + k.slice(-4) : "";
+// "Made with Cool Caps" tag on Free exports (and the preview, so there are no surprises)
+function drawWatermark(ctx, vw, vh) {
+  if (isPro()) return;
+  const px = Math.max(14, Math.round(Math.min(vw, vh) * 0.028)), pad = px * 0.55;
+  ctx.save();
+  ctx.font = `800 ${px}px "Poppins", system-ui, sans-serif`; ctx.textBaseline = "middle";
+  const txt = "Made with COOL CAPS", tw = ctx.measureText(txt).width;
+  const w = tw + pad * 2, h = px * 1.7, x = vw - w - px * 0.9, y = px * 1.2;
+  ctx.globalAlpha = 0.78; ctx.fillStyle = "rgba(0,0,0,.45)";
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, h / 2) : ctx.rect(x, y, w, h); ctx.fill();
+  ctx.globalAlpha = 0.95; ctx.fillStyle = "#FFFFFF"; ctx.fillText(txt, x + pad, y + h / 2 + px * 0.04);
+  ctx.restore();
+}
 // Every animation comes with its own signature look (like a template). Users can change it all after.
 const STYLE_LOOKS = {
   karaoke:    { font: "poppins",  color: "#FFFFFF", highlight: "#FFE600", outline: "medium", outline_color: "#000000", shadow: "soft", upper: true },
@@ -797,7 +890,7 @@ function textFX(ctx, s, text, x, y, px, fill, o = {}) {
 
 function layoutBlock(ctx, s, vw, g, px) {
   ctx.font = kFont(s, px);
-  const space = ctx.measureText(" ").width, maxW = vw * s.maxw;
+  const space = isNoSpace(g) ? 0 : ctx.measureText(" ").width, maxW = vw * s.maxw, rtl = isRTL(g);
   const items = g.map((w, j) => { const text = up(s, w.word); return { w, j, text, width: ctx.measureText(text).width }; });
   const lines = []; let cur = [], cw = 0;
   for (const it of items) {
@@ -809,6 +902,7 @@ function layoutBlock(ctx, s, vw, g, px) {
   lines.forEach((ln, li) => {
     let x = -ln.width / 2; ln.y = -blockH / 2 + lh * (li + 0.5);
     ln.items.forEach((it) => { it.x = x + it.width / 2; it.y = ln.y; it.left = x; x += it.width + space; });
+    if (rtl) ln.items.forEach((it) => { it.x = -it.x; it.left = it.x - it.width / 2; });  // read right to left
   });
   return { items, lines, blockW, blockH, lh, space };
 }
@@ -859,7 +953,7 @@ function drawFrame(ctx, vw, vh, groups, t, s) {
     if (cur.length) lines.push(cur);
     const targetW = vw * s.maxw * 0.95;
     ctx.font = kFont(s, 100);
-    const space = ctx.measureText(" ").width / 100;
+    const space = isNoSpace(g) ? 0 : ctx.measureText(" ").width / 100, rtl = isRTL(g);
     const info = lines.map((items) => {
       const w100 = items.reduce((a, it) => a + ctx.measureText(it.text).width / 100, 0) + space * (items.length - 1);
       return { items, px: Math.max(px * 0.7, Math.min(targetW / w100, px * 2.6)), w100 };
@@ -877,7 +971,7 @@ function drawFrame(ctx, vw, vh, groups, t, s) {
       const sp = space * l.px, widths = l.items.map((it) => ctx.measureText(it.text).width);
       let x = -(widths.reduce((a, b) => a + b, 0) + sp * (l.items.length - 1)) / 2;
       l.items.forEach((it, k) => {
-        const wx = x + widths[k] / 2; x += widths[k] + sp;
+        let wx = x + widths[k] / 2; x += widths[k] + sp; if (rtl) wx = -wx;
         const d = t - it.w.start; if (d < 0) return;
         const sc = 1.6 + (1 - 1.6) * easeOutBack(d / 0.24, 2.4);
         ctx.save(); ctx.globalAlpha *= clamp01(d / 0.05); ctx.translate(wx, ly); ctx.scale(sc, sc);
@@ -969,6 +1063,9 @@ function drawFrame(ctx, vw, vh, groups, t, s) {
         } else if (st === "spin") {
           if (d < 0) return;
           const p = easeOutBack(d / 0.38, 1.9); rot = (j % 2 ? 1 : -1) * (1 - p) * Math.PI / 2; sc = 0.3 + 0.7 * p; alpha = clamp01(d / 0.08);
+        } else if (st === "letters" && (RTL_RE.test(it.text) || /[\u0900-\u0dff]/.test(it.text))) {
+          if (d < 0) return;
+          const p = easeOutBack(d / 0.3, 2.4); alpha = clamp01(d / 0.06); dy = -(1 - p) * px * 0.75;
         } else if (st === "letters") {
           if (d < 0) return;
           const chars = [...it.text]; let prefix = "";
@@ -1012,6 +1109,7 @@ class Captioner {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, ch);
     ctx.setTransform(k, 0, 0, k, (cw - this.vw * k) / 2, (ch - this.vh * k) / 2);
     this.bbox = drawFrame(ctx, this.vw, this.vh, this.groups, t, this.s);
+    if (this.watermark) drawWatermark(ctx, this.vw, this.vh);
   }
 }
 
@@ -1037,7 +1135,7 @@ const minis = [];
 
 const PRESETS = [
   { name: "Classic", sub: "Karaoke · yellow", s: { style: "karaoke", words: 3 } },
-  { name: "CapCut box", sub: "Box · purple", s: { style: "box", words: 3 } },
+  { name: "Spotlight", sub: "Box · purple", s: { style: "box", words: 3 } },
   { name: "Kinetic", sub: "Stack · poster", s: { style: "stack", words: 4 } },
   { name: "Neon", sub: "Glowing sign", s: { style: "neon", words: 3 } },
   { name: "Cartoon", sub: "Pop · pink", s: { style: "pop", words: 2, text_size: "large" } },
@@ -1103,7 +1201,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.0 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.1 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1224,14 +1322,51 @@ function closeSheet() { const v = $("#veil"); if (v) { v.querySelectorAll("video
 function paywall(style) {
   openSheet((sh) => {
     sh.classList.add("pw");
+    if (isPro()) {
+      sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Pro is on"));
+      sh.append(el("p", "sub", LOCK_PRO ? "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." : "Beta: everything is unlocked for now."));
+      if (LIC && LIC.key) {
+        sh.append(el("p", "sub", "License key " + maskKey(LIC.key) + (LIC.email ? " · " + LIC.email : "")));
+        const rm = el("button", "btn danger block", "Remove Pro from this phone");
+        rm.onclick = async () => {
+          if (!rm.dataset.sure) { rm.dataset.sure = "1"; rm.textContent = "Tap again. Frees the key for another phone"; return; }
+          rm.disabled = true; await removeKey(); closeSheet(); refreshPlan(); toast("Pro removed from this phone");
+        };
+        sh.append(rm);
+      }
+      const ok = el("button", "btn ghost block", "Close"); ok.onclick = closeSheet; sh.append(ok);
+      return;
+    }
     sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Unlock every style"));
-    sh.append(el("p", "sub", style ? `"${style[0].toUpperCase() + style.slice(1)}" is a Pro animation.` : "Get the full creative toolkit."));
+    sh.append(el("p", "sub", style === "max" ? "Max quality exports are part of Pro." : style ? `"${style[0].toUpperCase() + style.slice(1)}" is a Pro animation.` : "Get the full creative toolkit."));
     const ul = el("ul", "pwlist");
-    ["All 12 Trendy and Kinetic animations", "No watermark on exports", "Every effect, emoji and font", "New styles as they're added"].forEach((x) => ul.append(el("li", "", x)));
-    const buy = el("button", "btn primary block", "Coming soon"); buy.disabled = true;
-    const later = el("button", "btn ghost block", "Keep using Free styles"); later.onclick = closeSheet;
-    sh.append(ul, buy, later);
+    [`All ${PRO.size} Trendy and Kinetic animations`, "No watermark on your videos", "Max quality exports", "Every new style we add, free"].forEach((x) => ul.append(el("li", "", x)));
+    const price = el("div", "pwprice"); price.append(el("b", "display", PRO_PRICE), el("span", "", PRO_PRICE_NOTE));
+    const buy = el("button", "btn primary block", CHECKOUT_URL ? `Get Pro for ${PRO_PRICE}` : "Checkout coming soon");
+    if (CHECKOUT_URL) buy.onclick = () => window.open(CHECKOUT_URL, "_blank", "noopener");
+    else buy.disabled = true;
+    const keyWrap = el("div", "pwkey"); keyWrap.hidden = true;
+    const inp = el("input"); inp.type = "text"; inp.placeholder = "Paste your license key"; inp.autocomplete = "off"; inp.spellcheck = false; inp.setAttribute("autocapitalize", "characters");
+    const act = el("button", "btn primary block", "Activate Pro"), msg = el("p", "sub pwmsg", "");
+    act.onclick = async () => {
+      act.disabled = true; act.textContent = "Checking…"; msg.textContent = ""; msg.classList.remove("bad");
+      try { await activateKey(inp.value); closeSheet(); refreshPlan(); toast("Pro unlocked. Enjoy!"); }
+      catch (e) { msg.textContent = e.message; msg.classList.add("bad"); act.disabled = false; act.textContent = "Activate Pro"; }
+    };
+    inp.onkeydown = (e) => { if (e.key === "Enter") act.click(); };
+    keyWrap.append(inp, act, msg);
+    const have = el("button", "btn ghost block", "I already have a key");
+    have.onclick = () => { have.hidden = true; keyWrap.hidden = false; inp.focus(); };
+    const later = el("button", "linkbtn", "Keep using Free"); later.onclick = closeSheet;
+    sh.append(ul, price, buy, have, keyWrap, later);
+    sh.append(el("p", "fine", "After paying you'll get a license key by email. Paste it here. Works on up to 3 phones."));
   });
+}
+function refreshPlan() {
+  const n = $("#planNote"); if (n) n.textContent = !LOCK_PRO ? "Beta: all Pro styles are unlocked for now" : isPro() ? "Pro is on. Thank you!" : `Free plan · unlock everything for ${PRO_PRICE}`;
+  document.body.classList.toggle("is-pro", isPro());
+  if (typeof syncSettings === "function") try { syncSettings(); } catch {}
+  if (main && typeof video !== "undefined") try { main.render(video.currentTime); } catch {}
 }
 function openPlayer(it) {
   openSheet((sh) => {
@@ -1252,14 +1387,14 @@ function openPlayer(it) {
 }
 
 /* ===================== settings ===================== */
-const LANGS = [["", "Auto-detect"], ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["it", "Italian"], ["pt", "Portuguese"], ["nl", "Dutch"], ["ar", "Arabic"], ["hi", "Hindi"], ["tl", "Tagalog"], ["id", "Indonesian"], ["vi", "Vietnamese"], ["tr", "Turkish"], ["ru", "Russian"], ["ja", "Japanese"], ["ko", "Korean"], ["zh", "Chinese"]];
+const LANGS = [["", "Auto-detect (any language)"], ["af", "Afrikaans"], ["sq", "Albanian"], ["am", "Amharic"], ["ar", "Arabic"], ["hy", "Armenian"], ["as", "Assamese"], ["az", "Azerbaijani"], ["ba", "Bashkir"], ["eu", "Basque"], ["be", "Belarusian"], ["bn", "Bengali"], ["bs", "Bosnian"], ["br", "Breton"], ["bg", "Bulgarian"], ["my", "Burmese"], ["yue", "Cantonese"], ["ca", "Catalan"], ["zh", "Chinese"], ["hr", "Croatian"], ["cs", "Czech"], ["da", "Danish"], ["nl", "Dutch"], ["en", "English"], ["et", "Estonian"], ["fo", "Faroese"], ["fi", "Finnish"], ["fr", "French"], ["gl", "Galician"], ["ka", "Georgian"], ["de", "German"], ["el", "Greek"], ["gu", "Gujarati"], ["ht", "Haitian Creole"], ["ha", "Hausa"], ["haw", "Hawaiian"], ["he", "Hebrew"], ["hi", "Hindi"], ["hu", "Hungarian"], ["is", "Icelandic"], ["id", "Indonesian"], ["it", "Italian"], ["ja", "Japanese"], ["jw", "Javanese"], ["kn", "Kannada"], ["kk", "Kazakh"], ["km", "Khmer"], ["ko", "Korean"], ["lo", "Lao"], ["la", "Latin"], ["lv", "Latvian"], ["ln", "Lingala"], ["lt", "Lithuanian"], ["lb", "Luxembourgish"], ["mk", "Macedonian"], ["mg", "Malagasy"], ["ms", "Malay"], ["ml", "Malayalam"], ["mt", "Maltese"], ["mi", "Maori"], ["mr", "Marathi"], ["mn", "Mongolian"], ["ne", "Nepali"], ["no", "Norwegian"], ["nn", "Nynorsk"], ["oc", "Occitan"], ["ps", "Pashto"], ["fa", "Persian"], ["pl", "Polish"], ["pt", "Portuguese"], ["pa", "Punjabi"], ["ro", "Romanian"], ["ru", "Russian"], ["sa", "Sanskrit"], ["sr", "Serbian"], ["sn", "Shona"], ["sd", "Sindhi"], ["si", "Sinhala"], ["sk", "Slovak"], ["sl", "Slovenian"], ["so", "Somali"], ["es", "Spanish"], ["su", "Sundanese"], ["sw", "Swahili"], ["sv", "Swedish"], ["tl", "Tagalog"], ["tg", "Tajik"], ["ta", "Tamil"], ["tt", "Tatar"], ["te", "Telugu"], ["th", "Thai"], ["bo", "Tibetan"], ["tr", "Turkish"], ["tk", "Turkmen"], ["uk", "Ukrainian"], ["ur", "Urdu"], ["uz", "Uzbek"], ["vi", "Vietnamese"], ["cy", "Welsh"], ["yi", "Yiddish"], ["yo", "Yoruba"]];
 const ACC_NOTE = { base: "Fastest, smallest download. Good for clear speech.", small: "Right for most videos.", medium: "Most accurate, but slower and a much bigger download." };
 const Q_NOTE = { standard: "Smaller files, quick to upload.", high: "Looks great, sensible file size.", max: "Best quality, bigger files." };
 function buildSettings() {
   const sel = $("#langSel"); LANGS.forEach(([v, l]) => { const o = el("option", "", l); o.value = v; sel.append(o); });
   sel.onchange = () => { APP.lang = sel.value; saveApp(); };
   $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
-  $$("#qSeg button").forEach((b) => (b.onclick = () => { APP.quality = b.dataset.v; saveApp(); }));
+  $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
   $("#rememberSw").onclick = () => { APP.remember = !APP.remember; saveApp(); if (APP.remember) persist(); };
   $("#resetStyle").onclick = () => { setS({ ...DEFAULTS, ...lookFor("karaoke") }); toast("Caption style reset"); };
   $("#clearLib").onclick = async (e) => {
@@ -1271,21 +1406,23 @@ function buildSettings() {
   $("#stFfmpeg").innerHTML = '<span class="ok">Built into Chrome</span>';
   $("#stFonts").textContent = `${INFO.fonts.length} fonts`;
   $("#stVer").textContent = "Version " + (INFO.version || "1");
-  $("#planNote").textContent = LOCK_PRO ? "Free plan. Tap to see what Pro unlocks." : "Beta: all Pro styles are unlocked for now";
   $("#planRow").onclick = () => paywall(null);
+  refreshPlan(); recheckLicense();
   syncSettings();
 }
 function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
 function syncSettings() {
   $$("#accSeg button").forEach((b) => pressed(b, b.dataset.v === APP.model));
-  $$("#qSeg button").forEach((b) => pressed(b, b.dataset.v === APP.quality));
+  const q = APP.quality === "max" && !isPro() ? "high" : APP.quality;
+  $$("#qSeg button").forEach((b) => pressed(b, b.dataset.v === q));
+  $("#qMax").classList.toggle("locked", !isPro());
   $("#accNote").textContent = ACC_NOTE[APP.model] || ""; $("#qNote").textContent = Q_NOTE[APP.quality] || "";
   $("#langSel").value = APP.lang; $("#rememberSw").setAttribute("aria-checked", APP.remember);
 }
 
 /* ===================== editor controls ===================== */
 const TOOLS = [["style", "Animation"], ["font", "Font"], ["look", "Look"], ["fx", "Effects"], ["words", "Words"], ["text", "Transcript"]];
-const WPS_HINT = { 1: "One word at a time. Maximum punch.", 2: "Fast and punchy, the TikTok pace.", 3: "Balanced. The most popular choice.", 4: "Relaxed and easy to follow.", 5: "Calm, good for long talking." };
+const WPS_HINT = { 1: "One word at a time. Maximum punch.", 2: "Fast and punchy, perfect for short videos.", 3: "Balanced. The most popular choice.", 4: "Relaxed and easy to follow.", 5: "Calm, good for long talking." };
 function swatches(root, prop) {
   Object.entries(INFO.colors).forEach(([name, hex]) => { const b = el("button", "sw"); b.style.background = hex; b.dataset.hex = hex.toUpperCase(); b.setAttribute("aria-label", name); b.title = name; b.onclick = () => setS({ [prop]: hex.toUpperCase() }); root.append(b); });
   const c = el("label", "sw custom"); c.title = "Any colour"; const inp = el("input"); inp.type = "color"; inp.setAttribute("aria-label", "Any colour"); inp.oninput = () => setS({ [prop]: inp.value.toUpperCase() }); c.append(inp); root.append(c);
@@ -1415,14 +1552,38 @@ function setWorking(on, { pct = null, stage = "", note = "", error = false } = {
 
 
 const WORKER_SRC = `
-import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
+import { pipeline, env, Tensor } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
 env.allowLocalModels = false;
-let asr = null, current = "";
+const THREADS = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)) : 1;
+env.backends.onnx.wasm.numThreads = THREADS;
+let asr = null, current = "", device = "";
 async function load(model, device) {
   const opts = device === "webgpu"
     ? { device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" } }
     : { device: "wasm", dtype: "q8" };
   return pipeline("automatic-speech-recognition", model, { ...opts, progress_callback: (p) => postMessage({ type: "progress", p }) });
+}
+// Whisper's own language check: listen to (up to) 30 seconds from the busiest part, take one
+// decoder step after <|startoftranscript|> and pick the most likely language token.
+// Without this the library quietly assumes English.
+async function detectLanguage(audio) {
+  try {
+    const tok = asr.tokenizer, ids = tok.model.tokens_to_ids;
+    const sot = ids.get("<|startoftranscript|>"); if (sot == null) return null;
+    const langs = [];
+    for (const [t, id] of ids) { const m = /^<\|([a-z]{2,3}|haw|yue)\|>$/.exec(t); if (m) langs.push([m[1], id]); }
+    if (!langs.length) return null;
+    // start where there's speech: skip leading silence
+    const SR = 16000, win = 30 * SR; let start = 0;
+    for (let i = 0; i < audio.length; i += SR / 10) { let e = 0; for (let k = i; k < Math.min(audio.length, i + SR / 10); k++) e += audio[k] * audio[k]; if (e / (SR / 10) > 1e-4) { start = Math.max(0, i - SR / 2); break; } }
+    const clip = audio.slice(start, start + win);
+    const { input_features } = await asr.processor(clip);
+    const out = await asr.model({ input_features, decoder_input_ids: new Tensor("int64", new BigInt64Array([BigInt(sot)]), [1, 1]) });
+    const logits = out.logits, V = logits.dims.at(-1), data = logits.data;
+    let best = null, bv = -Infinity;
+    for (const [code, id] of langs) { const v = data[data.length - V + id]; if (v > bv) { bv = v; best = code; } }
+    return best;
+  } catch (err) { postMessage({ type: "warn", message: "language check failed: " + (err && err.message || err) }); return null; }
 }
 self.onmessage = async (e) => {
   const { audio, model, language } = e.data;
@@ -1431,20 +1592,43 @@ self.onmessage = async (e) => {
       postMessage({ type: "loading" });
       let dev = self.navigator && self.navigator.gpu ? "webgpu" : "wasm";
       try { asr = await load(model, dev); }
-      catch (err) { if (dev !== "webgpu") throw err; dev = "wasm"; asr = await load(model, dev); }
-      current = model;
+      catch (err) {
+        if (dev === "webgpu") { dev = "wasm"; try { asr = await load(model, dev); } catch (e2) { err = e2; asr = null; } }
+        if (!asr && env.backends.onnx.wasm.numThreads > 1) { env.backends.onnx.wasm.numThreads = 1; asr = await load(model, "wasm"); }
+        if (!asr) throw err;
+      }
+      current = model; device = dev;
+      postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
     }
+    let lang = language;
+    if (!lang) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); if (lang) postMessage({ type: "detected", lang }); }
     postMessage({ type: "stage" });
-    const opts = { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5 };
-    if (language) { opts.language = language; opts.task = "transcribe"; }
-    const out = await asr(audio, opts);
-    const words = [];
-    for (const c of out.chunks || []) {
-      const w = String(c.text || "").trim(); if (!w) continue;
-      let [s0, s1] = c.timestamp || [0, 0];
-      if (s0 == null) s0 = words.length ? words[words.length - 1].end : 0;
-      if (s1 == null || s1 <= s0) s1 = s0 + 0.3;
-      words.push({ word: w, start: s0, end: s1 });
+    const opts = { return_timestamps: "word", task: "transcribe" };
+    if (lang) opts.language = lang;
+    // Cut the audio into pieces of up to 30 s (Whisper's window), splitting in the quietest spot
+    // so no word gets chopped. No overlap needed, which saves about a third of the work,
+    // and we can show real progress after every piece.
+    const SR = 16000, MAX = 30 * SR, total = audio.length, words = [];
+    let pos = 0;
+    while (pos < total) {
+      let end = Math.min(total, pos + MAX);
+      if (end < total) {
+        let best = end, bestE = Infinity;
+        for (let i = pos + 20 * SR; i + 1600 <= end; i += 800) { let e2 = 0; for (let k = i; k < i + 1600; k += 4) e2 += audio[k] * audio[k]; if (e2 < bestE) { bestE = e2; best = i + 800; } }
+        end = best;
+      }
+      if (end - pos > SR / 4) {
+        const out = await asr(audio.slice(pos, end), opts), off = pos / SR;
+        for (const c of out.chunks || []) {
+          const w = String(c.text || "").trim(); if (!w) continue;
+          let [s0, s1] = c.timestamp || [0, 0];
+          s0 = s0 == null ? (words.length ? words[words.length - 1].end : off) : s0 + off;
+          s1 = s1 == null ? s0 + 0.3 : s1 + off; if (s1 <= s0) s1 = s0 + 0.3;
+          words.push({ word: w, start: s0, end: s1 });
+        }
+      }
+      pos = end;
+      postMessage({ type: "chunk", done: pos / total });
     }
     postMessage({ type: "done", words });
   } catch (err) { postMessage({ type: "error", message: String((err && err.message) || err) }); }
@@ -1464,10 +1648,13 @@ async function decodeAudio(file) {
   for (let i = 0; i < a.length; i++) out[i] = (a[i] + b[i]) / 2;
   return out;
 }
+let detectedLang = "";
+const langName = (c) => (LANGS.find((l) => l[0] === c) || [, c])[1];
 function transcribe(audio, onStatus) {
+  detectedLang = "";
   if (FAKE) return fetch("words.json").then((r) => r.json());
   return new Promise((resolve, reject) => {
-    const w = getWorker(), files = {}, t0 = performance.now(); let timer = null;
+    const w = getWorker(), files = {}, t0 = performance.now(); let timer = null, tStage = t0, engine = "phone";
     const finish = () => { clearInterval(timer); w.onmessage = null; w.onerror = null; };
     w.onmessage = (e) => {
       const m = e.data;
@@ -1478,12 +1665,21 @@ function transcribe(audio, onStatus) {
           const vals = Object.values(files), L = vals.reduce((a, v) => a + v[0], 0), T = vals.reduce((a, v) => a + v[1], 0);
           onStatus({ pct: T ? L / T : null, stage: "Downloading the speech model", note: `First time only (${Math.round(T / 1e6)} MB). After this it starts straight away, even offline.` });
         }
-      } else if (m.type === "loading") onStatus({ pct: null, stage: "Starting Whisper", note: "Getting the speech model ready on your phone." });
+      } else if (m.type === "detecting") onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
+      else if (m.type === "detected") { detectedLang = m.lang; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
+      else if (m.type === "warn") console.warn(m.message);
+      else if (m.type === "device") engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
+      else if (m.type === "chunk") {
+        clearInterval(timer); timer = null;
+        const el2 = (performance.now() - tStage) / 1000, left = m.done > 0.02 ? el2 / m.done - el2 : null;
+        onStatus({ pct: m.done, stage: "Transcribing" + (detectedLang ? " · " + langName(detectedLang) : ""), note: m.done >= 1 ? "Finishing up…" : left != null ? `About ${left < 60 ? Math.max(1, Math.round(left)) + " s" : Math.round(left / 60) + " min"} left · using your ${engine}` : `Using your ${engine}` });
+      }
+      else if (m.type === "loading") onStatus({ pct: null, stage: "Starting Whisper", note: "Getting the speech model ready on your phone." });
       else if (m.type === "stage") {
-        const len = audio.length / 16000;
-        const tick = () => onStatus({ pct: null, stage: "Transcribing", note: `Whisper is listening on your phone · ${Math.round((performance.now() - t0) / 1000)}s (video is ${Math.round(len)}s)` });
+        const len = audio.length / 16000; tStage = performance.now();
+        const tick = () => onStatus({ pct: null, stage: "Transcribing" + (detectedLang ? " · " + langName(detectedLang) : ""), note: `Whisper is listening on your phone · ${Math.round((performance.now() - t0) / 1000)}s (video is ${Math.round(len)}s)` });
         tick(); timer = setInterval(tick, 1000);
-      } else if (m.type === "done") { finish(); resolve(m.words); }
+      } else if (m.type === "done") { finish(); resolve(splitLongWords(m.words)); }
       else if (m.type === "error") { finish(); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
     };
     w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
@@ -1501,7 +1697,7 @@ async function startFile(file) {
   if (objectURL) URL.revokeObjectURL(objectURL);
   objectURL = URL.createObjectURL(file); video.src = objectURL; currentFile = file;
   $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
-  if (!main) main = new Captioner($("#caps"));
+  if (!main) { main = new Captioner($("#caps")); main.watermark = true; }
   main.set([], S, 1080, 1920);
   go("editor"); setTool("style");
   setWorking(true, { pct: null, stage: "Reading the audio", note: "Your video stays on your phone. Nothing is uploaded." });
@@ -1740,12 +1936,15 @@ $("#editText").onclick = () => {
 };
 
 /* ===================== export: the app draws every frame, the engine lays them over the video ===================== */
-function resultProgress(pct, note) {
+const secsText = (x) => { x = Math.max(1, Math.ceil(x)); return x < 60 ? `${x} sec` : `${Math.floor(x / 60)} min ${String(x % 60).padStart(2, "0")} sec`; };
+function resultProgress(pct, note, left, stage) {
   $("#resTitle").textContent = "Exporting";
   const r = $("#result"); r.textContent = "";
   const fr = el("div", "frame"); fr.append(el("div", "e-num display", Math.round(pct * 100) + "%"));
+  if (left != null) fr.append(el("div", "e-left", left <= 0.5 ? "Almost done" : `About ${secsText(left)} left`));
   const bar = el("div", "w-bar"); bar.style.width = "100%"; const i = el("i"); i.style.width = Math.round(pct * 100) + "%"; bar.append(i);
-  r.append(fr, bar, el("p", "fname", note));
+  if (stage) r.append(el("p", "e-stage", stage));
+  r.append(fr, bar, el("p", "e-note", note));
 }
 let exporting = false;
 const BITRATE = { standard: 6e6, high: 12e6, max: 20e6 };
@@ -1764,7 +1963,9 @@ $("#exportBtn").onclick = async () => {
   const v = el("video"); v.src = objectURL; v.playsInline = true; v.preload = "auto";
   v.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
   document.body.append(v);
-  video.pause(); go("result"); resultProgress(0, "Getting ready…");
+  video.pause(); go("result");
+  const D0 = (job && job.duration) || video.duration || 0;
+  resultProgress(0, `Exporting plays your video through once while adding the captions, so it takes about as long as the video (${secsText(D0)}).`, D0 + 3, "Step 1 of 2 · Getting ready");
   const SS = { ...S }, W = words.map((w) => ({ ...w }));
   try {
     keepAwake(true);
@@ -1779,7 +1980,7 @@ $("#exportBtn").onclick = async () => {
     const stream = cnv.captureStream(30);
     dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     const mime = pickMime();
-    const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: BITRATE[APP.quality] || 12e6, audioBitsPerSecond: 192000 });
+    const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: BITRATE[APP.quality === "max" && !isPro() ? "high" : APP.quality] || 12e6, audioBitsPerSecond: 192000 });
     const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise((r) => (rec.onstop = r));
     const dur = v.duration || job.duration;
@@ -1787,10 +1988,10 @@ $("#exportBtn").onclick = async () => {
     const makeThumb = () => { const c = el("canvas"); c.width = 180; c.height = Math.round(180 * oh / ow); c.getContext("2d").drawImage(cnv, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.72); };
     const draw = () => {
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(v, 0, 0, ow, oh);
-      ctx.setTransform(scl, 0, 0, scl, 0, 0); drawFrame(ctx, vw, vh, groups, v.currentTime, SS);
+      ctx.setTransform(scl, 0, 0, scl, 0, 0); drawFrame(ctx, vw, vh, groups, v.currentTime, SS); drawWatermark(ctx, vw, vh);
       if (!thumb && v.currentTime > Math.min(dur * 0.3, 3)) thumb = makeThumb();
       const now = performance.now();
-      if (now - lastUi > 250 && view === "result") { lastUi = now; resultProgress(Math.min(0.99, v.currentTime / dur), `Recording your video: ${fmt(v.currentTime).replace(/\.\d$/, "")} of ${fmt(dur).replace(/\.\d$/, "")}. Keep the screen on and Cool Caps open.`); }
+      if (now - lastUi > 250 && view === "result") { lastUi = now; resultProgress(Math.min(0.97, 0.97 * v.currentTime / dur), "Keep your screen on and Cool Caps open until it's done. Switching apps pauses the export.", Math.max(0, dur - v.currentTime) + 2, "Step 1 of 2 · Adding your captions"); }
     };
     const hasVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
     const onFrame = () => { draw(); if (!v.ended) v.requestVideoFrameCallback(onFrame); };
@@ -1800,7 +2001,13 @@ $("#exportBtn").onclick = async () => {
     await ac.resume();
     await v.play();
     if (hasVFC) v.requestVideoFrameCallback(onFrame); else loop();
-    await new Promise((r) => { if (v.ended) r(); else v.onended = r; });
+    await new Promise((r) => {
+      if (v.ended) return r();
+      v.onended = r;
+      // some phones never fire "ended" on the last frame: finish anyway once we're at the end
+      const watch = setInterval(() => { if (v.ended || v.currentTime >= dur - 0.08) { clearInterval(watch); setTimeout(r, 400); } }, 300);
+    });
+    if (view === "result") resultProgress(0.98, "Putting the finished video together. This only takes a moment.", 2, "Step 2 of 2 · Saving your video");
     draw(); await sleep(200); rec.stop(); await stopped;
     const type = (mime || "video/webm").split(";")[0], ext = type.includes("mp4") ? "mp4" : "webm";
     const blob = new Blob(chunks, { type });
@@ -1850,7 +2057,12 @@ function setupInstall() {
 }
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; $("#installHow").textContent = "Opens full screen, like a real app. Tap Install."; });
 window.addEventListener("appinstalled", () => { $("#installCard").hidden = true; toast("Cool Caps is on your home screen"); });
-if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(() => {
+    // The first visit isn't sped up until the helper is running: reload once so it is.
+    if (!window.crossOriginIsolated && !sessionStorage.getItem("coolcaps.coi")) { sessionStorage.setItem("coolcaps.coi", "1"); if (!job) location.reload(); }
+  }).catch(() => {});
+}
 
 /* ===================== frame loop ===================== */
 function frame(now) {

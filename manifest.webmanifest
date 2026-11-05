@@ -1,7 +1,7 @@
 {
   "name": "Cool Caps",
   "short_name": "Cool Caps",
-  "description": "Animated captions for Reels, TikTok and Shorts, made on your phone",
+  "description": "Animated captions for your short videos, made on your phone",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
