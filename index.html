@@ -1,0 +1,1896 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cool Caps</title>
+<meta name="theme-color" content="#0B0A0F">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cool Caps">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230B0A0F'/%3E%3Crect x='12' y='20' width='26' height='9' rx='4.5' fill='%23F6F3EC'/%3E%3Crect x='12' y='35' width='40' height='11' rx='5.5' fill='%23FFE14D'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&family=Anton&family=Archivo+Black&family=Bangers&family=Bebas+Neue&family=Bungee&family=Luckiest+Guy&family=Monoton&family=Montserrat:wght@800&family=Permanent+Marker&family=Poppins:wght@900&family=Shrikhand&display=swap">
+<style>
+
+/* Layout: a phone app. One tall column; each screen is a full-height view with a soft
+   aurora glow behind its header. Home / Library share a frosted floating nav; Settings sits
+   behind the gear. Editor: preview on top, a control sheet with six plainly named tabs below.
+   Single dark theme on purpose: it's a video editor, the footage should be the brightest thing. */
+:root {
+  --bg: #0B0A0F;
+  --panel: #14121A;
+  --raised: #1C1924;
+  --raised-2: #26222F;
+  --line: rgba(255, 255, 255, .07);
+  --line-2: rgba(255, 255, 255, .14);
+  --text: #F6F3EC;
+  --muted: #A39DB0;
+  --faint: #6E6879;
+  --accent: #FFE14D;
+  --accent-ink: #1A1606;
+  --accent-soft: rgba(255, 225, 77, .14);
+  --pink: #FF5FA2;
+  --violet: #8C6BFF;
+  --danger: #FF6B6B;
+  --ok: #6BE59A;
+
+  --display: "Anton", Impact, "Haettenschweiler", "Arial Narrow Bold", sans-serif;
+  --ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --r-xl: 30px;
+  --r-lg: 24px;
+  --r-md: 18px;
+  --r-sm: 12px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; }
+body { background: #060509; color: var(--text); font: 14px/1.45 var(--ui); -webkit-font-smoothing: antialiased; overflow: hidden; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.display { font-family: var(--display); font-weight: 400; letter-spacing: .01em; text-transform: uppercase; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+
+/* ---------- phone column + views */
+.device { position: relative; height: 100%; max-width: 460px; margin: 0 auto; background: var(--bg); overflow: hidden; padding-top: env(safe-area-inset-top, 0px); }
+@media (min-width: 620px) {
+  .device { height: min(100% - 32px, 940px); margin-top: max(16px, calc((100vh - 940px) / 2)); border-radius: 42px; border: 1px solid var(--line-2); box-shadow: 0 50px 120px -30px rgba(0,0,0,.95); }
+}
+.view { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); isolation: isolate; }
+.view.enter { animation: viewIn .34s cubic-bezier(.2, 1, .3, 1); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(14px); } }
+.aurora::before {
+  content: ""; position: absolute; z-index: -1; left: -30%; right: -30%; top: -160px; height: 420px; pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 30% 50%, rgba(255, 225, 77, .20), transparent 70%),
+    radial-gradient(35% 45% at 65% 40%, rgba(255, 95, 162, .16), transparent 70%),
+    radial-gradient(40% 50% at 85% 65%, rgba(140, 107, 255, .16), transparent 70%);
+  filter: blur(18px);
+}
+.scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 max(18px, env(safe-area-inset-right, 0px)) 140px max(18px, env(safe-area-inset-left, 0px)); scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+
+/* ---------- app bar */
+.appbar { flex: none; height: 66px; display: flex; align-items: center; gap: 10px; padding: 0 max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px)); }
+.appbar h1 { margin: 0; font-size: 30px; line-height: 1; flex: 1; padding-left: 4px; }
+.brand { display: flex; align-items: center; gap: 3px; font-family: var(--display); font-size: 25px; letter-spacing: .02em; line-height: 1; flex: 1; user-select: none; padding-left: 4px; }
+.brand .cool {
+  position: relative; display: inline-block; padding-right: 4px; margin-right: 7px; transform: skewX(-6deg);
+  filter: drop-shadow(0 0 6px rgba(125, 249, 255, .45)) drop-shadow(0 2px 0 rgba(40, 20, 90, .9));
+}
+.brand .cool > span {
+  display: inline-block; text-transform: uppercase; line-height: 1; padding: 0 1px;
+  background: linear-gradient(100deg, #7DF9FF 0%, #E8FDFF 30%, #FFFFFF 42%, #B79BFF 70%, #7DF9FF 100%);
+  background-size: 260% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  animation: shine 4.5s ease-in-out infinite;
+}
+.brand .cool > span:nth-child(2) { animation-delay: -.35s; }
+.brand .cool > span:nth-child(3) { animation-delay: -.7s; }
+.brand .cool > span:nth-child(4) { animation-delay: -1.05s; }
+.brand .l1 { font-family: "Shrikhand", Georgia, serif; font-style: italic; font-size: 1.08em; transform: rotate(-6deg) translateY(1px); }
+.brand .l2 { font-family: "Bungee", Impact, sans-serif; font-size: .86em; transform: rotate(4deg); margin-left: 1px; }
+.brand .l3 { font-family: "Monoton", "Courier New", monospace; font-size: .92em; transform: rotate(-3deg) translateY(-1px); margin-left: 1px; }
+.brand .l4 { font-family: "Permanent Marker", "Comic Sans MS", cursive; font-size: 1.02em; transform: rotate(7deg) translateY(1px); margin-left: 1px; }
+@keyframes shine { 0%, 100% { background-position: 0% 0; } 50% { background-position: 100% 0; } }
+.brand .spark { position: absolute; top: -7px; right: -5px; width: 13px; height: 13px; animation: twinkle 2.2s ease-in-out infinite; }
+.brand .spark.s2 { top: auto; bottom: -1px; left: -8px; right: auto; width: 8px; height: 8px; animation-delay: 1.1s; }
+@keyframes twinkle { 0%, 100% { transform: scale(.55) rotate(0deg); opacity: .55; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
+.brand .hl { background: var(--accent); color: var(--accent-ink); padding: 3px 6px 2px; border-radius: 7px; transform: rotate(-2deg); display: inline-block; box-shadow: 0 6px 18px -6px rgba(255, 225, 77, .6); }
+.iconbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.06); border: 1px solid var(--line); flex: none; backdrop-filter: blur(10px); transition: transform .12s, background .15s; }
+.iconbtn:hover { background: rgba(255,255,255,.1); }
+.iconbtn:active { transform: scale(.92); }
+.iconbtn svg { width: 20px; height: 20px; }
+.iconbtn.bare { background: none; border-color: transparent; backdrop-filter: none; }
+
+.btn { height: 48px; padding: 0 20px; border-radius: 999px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; text-decoration: none; transition: transform .12s, background .15s; }
+.btn:active { transform: scale(.97); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: #FFE96F; }
+a.btn { color: var(--text); }
+.btn.ghost { border: 1px solid var(--line-2); background: rgba(255,255,255,.03); }
+.btn.ghost:hover { background: var(--raised); }
+.btn.danger { color: var(--danger); border: 1px solid rgba(255,107,107,.35); }
+.btn.small { height: 38px; padding: 0 15px; font-size: 13px; }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .4; pointer-events: none; }
+
+/* ---------- bottom nav */
+.tabbar {
+  position: absolute; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 20;
+  display: grid; grid-template-columns: 1fr 78px 1fr; align-items: center; width: min(300px, calc(100% - 36px)); height: 68px; padding: 0 8px;
+  border-radius: 999px; background: rgba(28, 25, 36, .72); backdrop-filter: blur(22px) saturate(1.5); -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid var(--line-2); box-shadow: 0 20px 44px -12px rgba(0,0,0,.85);
+}
+.tabbar .tb { height: 52px; border-radius: 999px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--faint); font-size: 11px; font-weight: 600; transition: color .15s; }
+.tabbar .tb svg { width: 22px; height: 22px; }
+.tabbar .tb[aria-current=page] { color: var(--text); }
+.tabbar .tb[aria-current=page] svg { color: var(--accent); }
+.tabbar .plus { width: 66px; height: 66px; margin: -28px auto 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; box-shadow: 0 14px 30px -8px rgba(255, 225, 77, .6), 0 0 0 6px var(--bg); transition: transform .25s cubic-bezier(.3, 1.5, .5, 1); }
+.tabbar .plus:hover { transform: rotate(90deg); }
+.tabbar .plus svg { width: 28px; height: 28px; }
+
+/* ---------- home */
+.hello { margin: 4px 0 6px; font-size: 46px; line-height: .92; text-wrap: balance; }
+.hello .hl { color: var(--accent); }
+.lede { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
+.hero-card { position: relative; display: block; width: 100%; height: 290px; border-radius: var(--r-xl); overflow: hidden; text-align: left; border: 1px solid var(--line-2); transition: transform .2s; box-shadow: 0 30px 60px -30px rgba(0,0,0,.9); }
+.hero-card:active { transform: scale(.985); }
+body.dragging .hero-card { outline: 2px dashed var(--accent); outline-offset: 4px; }
+.footage {
+  background:
+    radial-gradient(90% 60% at 25% 18%, #5A3B22 0%, transparent 70%),
+    radial-gradient(80% 60% at 85% 75%, #123B44 0%, transparent 70%),
+    radial-gradient(60% 40% at 50% 105%, #2A1F35 0%, transparent 70%),
+    #16131B;
+}
+.hero-card .cap-layer { bottom: 80px; }
+.hero-foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 16px 16px 20px; display: flex; align-items: center; gap: 12px; background: linear-gradient(transparent, rgba(8, 7, 10, .88) 40%); }
+.hero-foot .hf { flex: 1; display: flex; flex-direction: column; }
+.hero-foot b { font-size: 19px; font-weight: 700; }
+.hero-foot .hf span { color: var(--muted); font-size: 13px; }
+.go { width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; box-shadow: 0 10px 24px -8px rgba(255, 225, 77, .6); }
+.go svg { width: 24px; height: 24px; }
+.hero-tag { position: absolute; top: 14px; left: 14px; padding: 6px 11px; border-radius: 999px; background: rgba(8,7,10,.55); backdrop-filter: blur(8px); font-size: 12px; font-weight: 600; text-transform: capitalize; border: 1px solid var(--line); }
+.hero-tag span { color: var(--faint); margin-right: 5px; font-weight: 500; }
+.how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.how div { padding: 12px 12px 11px; border-radius: var(--r-md); background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.how i { font-style: normal; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font: 600 12px var(--mono); }
+.how b { font-size: 13px; line-height: 1.2; }
+.how span { font-size: 11px; color: var(--faint); line-height: 1.3; }
+
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 12px; }
+.sec-head h2 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
+.link { color: var(--accent); font-weight: 600; font-size: 13px; }
+.hscroll { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 18px; margin: 0 -18px; padding: 2px 18px 6px; scrollbar-width: none; }
+.hscroll::-webkit-scrollbar { display: none; }
+.preset { position: relative; flex: none; width: 134px; border-radius: var(--r-lg); overflow: hidden; background: var(--raised); border: 1px solid var(--line); text-align: left; scroll-snap-align: start; transition: transform .15s, border-color .15s; }
+.preset:hover { border-color: var(--line-2); }
+.preset:active { transform: scale(.97); }
+.preset .demo { position: relative; height: 150px; }
+.preset .pname { display: block; padding: 9px 12px 11px; font-weight: 600; font-size: 13px; }
+.preset .pname small { display: block; color: var(--faint); font-weight: 500; font-size: 11px; }
+.preset[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.recent { display: flex; flex-direction: column; gap: 8px; }
+.ritem { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: var(--r-md); background: var(--panel); border: 1px solid var(--line); text-align: left; width: 100%; transition: background .15s; }
+.ritem:hover { background: var(--raised); }
+.thumb { width: 46px; height: 64px; border-radius: 11px; background: var(--raised-2) center / cover no-repeat; flex: none; }
+.ritem .rx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ritem b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ritem .rx span { color: var(--faint); font-size: 12px; }
+.chev { width: 18px; height: 18px; color: var(--faint); flex: none; }
+.empty { padding: 26px 18px; border-radius: var(--r-lg); border: 1.5px dashed var(--line-2); color: var(--muted); text-align: center; font-size: 13px; }
+.empty b { display: block; color: var(--text); font-size: 15px; margin-bottom: 2px; }
+.warn { margin-top: 14px; padding: 14px 16px; border-radius: var(--r-md); background: rgba(255, 107, 107, .1); border: 1px solid rgba(255, 107, 107, .35); color: #FFC9C9; font-size: 13px; }
+.install { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px; border-radius: var(--r-md); background: var(--panel); border: 1px solid var(--line-2); }
+.install img { width: 44px; height: 44px; border-radius: 12px; flex: none; }
+.install div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.install b { font-size: 14px; }
+.install span { font-size: 12px; color: var(--muted); }
+.warn code { font-family: var(--mono); color: var(--text); background: rgba(0,0,0,.3); padding: 1px 6px; border-radius: 5px; }
+
+/* ---------- library */
+.libgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.libitem { position: relative; aspect-ratio: 9 / 16; border-radius: 16px; overflow: hidden; background: var(--raised-2) center / cover no-repeat; border: 1px solid var(--line); }
+.libitem span { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 7px; font-size: 11px; font-weight: 600; text-align: left; background: linear-gradient(transparent, rgba(0,0,0,.8)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- settings */
+.group { margin-top: 22px; }
+.group > .label { padding: 0 6px 8px; display: block; }
+.card { border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; min-height: 58px; width: 100%; text-align: left; }
+.row + .row { border-top: 1px solid var(--line); }
+.row .ri { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--raised-2); flex: none; }
+.row .ri svg { width: 18px; height: 18px; }
+.row .rt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.row .rt b { font-weight: 600; }
+.row .rt span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.row.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+.row.stack .rhead { display: flex; align-items: center; gap: 12px; }
+.ok { color: var(--ok); }
+.bad { color: var(--danger); }
+select.sel { appearance: none; -webkit-appearance: none; height: 38px; padding: 0 34px 0 12px; border-radius: 11px; border: 1px solid var(--line-2); background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A39DB0' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") right 10px center / 16px no-repeat; cursor: pointer; }
+
+/* ---------- shared controls */
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 15px; background: var(--bg); border: 1px solid var(--line); }
+.seg button { height: 38px; border-radius: 11px; font-weight: 600; font-size: 13px; color: var(--muted); transition: background .15s, color .15s; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); }
+.switch { width: 50px; height: 30px; border-radius: 999px; background: var(--raised-2); border: 1px solid var(--line-2); position: relative; flex: none; transition: background .2s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; background: var(--text); transition: transform .22s cubic-bezier(.3, 1.4, .5, 1); }
+.switch[aria-checked=true] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked=true]::after { transform: translateX(20px); background: var(--accent-ink); }
+.slider { display: flex; flex-direction: column; gap: 2px; }
+.slider .sl-top { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+.slider .sl-top span { color: var(--faint); font: 12px var(--mono); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; background: transparent; cursor: pointer; display: block; }
+input[type=range]::-webkit-slider-runnable-track { height: 5px; border-radius: 5px; background: linear-gradient(90deg, var(--accent) var(--p, 0%), var(--raised-2) var(--p, 0%)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6.5px; border-radius: 50%; background: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+input[type=range]::-moz-range-track { height: 5px; border-radius: 5px; background: var(--raised-2); }
+input[type=range]::-moz-range-progress { height: 5px; border-radius: 5px; background: var(--accent); }
+input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--text); border: 0; }
+
+/* ---------- caption layer */
+.cap-layer { position: absolute; overflow: hidden; pointer-events: none; inset: 0; }
+.cap-layer canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ---------- editor */
+.ed-title { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ed-title b { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-title span { color: var(--faint); font-size: 12px; font-family: var(--mono); }
+.pill { height: 42px; padding: 0 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; flex: none; box-shadow: 0 10px 24px -10px rgba(255, 225, 77, .7); }
+.pill svg { width: 17px; height: 17px; }
+.pill:disabled { opacity: .35; pointer-events: none; }
+.stage { position: relative; flex: 1; min-height: 170px; margin: 0 12px; border-radius: var(--r-lg); overflow: hidden; background: #000; border: 1px solid var(--line); touch-action: none; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.stage .cap-layer { inset: auto; }
+.stage.can-drag { cursor: grab; }
+.stage.dragging { cursor: grabbing; }
+.gline { position: absolute; background: var(--pink); pointer-events: none; opacity: .9; }
+.gline.v { width: 1.5px; top: 0; bottom: 0; }
+.gline.h { height: 1.5px; left: 0; right: 0; }
+.pv-play { position: absolute; left: 12px; bottom: 12px; height: 38px; padding: 0 14px 0 10px; border-radius: 999px; display: flex; align-items: center; gap: 8px; background: rgba(8, 7, 10, .6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.12); font: 500 12px var(--mono); z-index: 2; }
+.pv-play svg { width: 16px; height: 16px; display: block; }
+.drag-hint { position: absolute; right: 12px; bottom: 12px; height: 38px; padding: 0 12px; border-radius: 999px; display: flex; align-items: center; gap: 6px; background: rgba(8, 7, 10, .6); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.12); font-size: 12px; font-weight: 600; color: var(--muted); pointer-events: none; z-index: 2; }
+.drag-hint svg { width: 15px; height: 15px; color: var(--accent); }
+.working { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px; background: rgba(11, 10, 15, .72); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+.w-num { font-size: 92px; line-height: .9; }
+.w-stage { font-size: 16px; font-weight: 600; }
+.w-bar { width: 72%; height: 6px; border-radius: 6px; background: var(--raised-2); overflow: hidden; margin-top: 6px; }
+.w-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--pink)); border-radius: 6px; transition: width .4s; }
+.w-bar.ind i { width: 35%; animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.w-note { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 34ch; }
+.w-note.err { color: #FFC9C9; }
+.scrub { flex: none; padding: 6px 18px 2px; }
+
+.tools { position: relative; flex: none; background: var(--panel); border-top: 1px solid var(--line-2); border-radius: 28px 28px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); transition: opacity .2s; box-shadow: 0 -20px 40px -20px rgba(0,0,0,.8); }
+.tools.locked { opacity: .4; pointer-events: none; }
+.tool-panel { height: 304px; overflow-y: auto; padding: 16px 16px 10px; scrollbar-width: none; }
+.tool-panel::-webkit-scrollbar { display: none; }
+.tpane { display: flex; flex-direction: column; gap: 12px; }
+.phead { display: flex; flex-direction: column; gap: 1px; }
+.phead b { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.phead span { color: var(--muted); font-size: 13px; }
+.grp { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-md); background: var(--raised); border: 1px solid var(--line); }
+.grp-title { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 14px; }
+.grp-title small { font-weight: 500; font-size: 12px; color: var(--faint); }
+.toolbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 8px 8px 12px; border-top: 1px solid var(--line); }
+.toolbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 7px; border-radius: 14px; font-size: 10.5px; font-weight: 600; color: var(--muted); transition: color .15s, background .15s; }
+.toolbar button svg { width: 22px; height: 22px; }
+.toolbar button:hover { color: var(--text); }
+.toolbar button[aria-selected=true] { color: var(--accent-ink); background: var(--accent); }
+
+.sgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scard { position: relative; border-radius: 16px; overflow: hidden; background: var(--raised); border: 1px solid var(--line); text-align: left; transition: border-color .15s, transform .15s; }
+.scard:hover { border-color: var(--line-2); }
+.scard:active { transform: scale(.97); }
+.scard .demo { position: relative; height: 90px; }
+.scard b { display: block; padding: 7px 10px 9px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
+.scard[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.sec-label { display: flex; align-items: center; gap: 8px; }
+.tag { display: inline-block; padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.tag.y { background: var(--accent); color: var(--accent-ink); }
+.tag.p { background: var(--pink); color: #2A0614; }
+.tag.f { background: var(--raised-2); color: var(--muted); border: 1px solid var(--line-2); }
+.tag.pro { background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; }
+.probadge { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 2px 6px; border-radius: 6px; font: 800 9px/1.3 var(--ui); letter-spacing: .06em; background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; box-shadow: 0 4px 10px -4px rgba(0,0,0,.6); }
+.sheet.pw { gap: 14px; }
+.sheet.pw .tag { align-self: flex-start; }
+.sheet.pw h3 { font-size: 40px; line-height: .95; font-weight: 400; }
+.pwlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.pwlist li { display: flex; gap: 10px; align-items: center; font-weight: 500; }
+.pwlist li::before { content: ""; width: 20px; height: 20px; border-radius: 50%; flex: none; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231A1606' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 13px no-repeat; }
+.ftile { border-radius: 16px; background: var(--raised); border: 1px solid var(--line); height: 106px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 8px; }
+.ftile .aa { font-size: 40px; line-height: 1; font-synthesis: none; }
+.ftile small { font-size: 11px; color: var(--muted); font-weight: 600; text-align: center; line-height: 1.25; }
+.ftile small i { display: block; font-style: normal; font-weight: 500; color: var(--faint); }
+.ftile[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.ftile[aria-pressed=true] small { color: var(--text); }
+
+/* visual option tiles (outline, shadow, background, size) */
+.opts { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.opt { height: 76px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--muted); transition: border-color .15s, color .15s; }
+.opt:hover { color: var(--text); }
+.opt .vis { font-family: var(--display); font-size: 26px; line-height: 1; color: #fff; height: 30px; display: flex; align-items: center; }
+.opt[aria-pressed=true] { border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 1px var(--accent); }
+.mini-frame { width: 22px; height: 34px; border-radius: 5px; border: 1.5px solid var(--line-2); position: relative; }
+.mini-frame i { position: absolute; left: 3px; right: 3px; height: 5px; border-radius: 3px; background: var(--accent); }
+
+.swrow { display: flex; gap: 10px; overflow-x: auto; margin: 0 -14px; padding: 6px 14px; scrollbar-width: none; }
+.swrow::-webkit-scrollbar { display: none; }
+.sw { width: 36px; height: 36px; border-radius: 50%; position: relative; flex: none; border: 1px solid rgba(255,255,255,.18); }
+.sw[aria-pressed=true]::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--accent); }
+.sw.custom { background: conic-gradient(#FF3B30, #FFE600, #39FF14, #00E5FF, #2F80FF, #8B3DFF, #FF2D95, #FF3B30); cursor: pointer; }
+.sw.custom input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.inline-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inline-row b { font-weight: 600; }
+.inline-row span { color: var(--muted); font-size: 12px; display: block; }
+.wps { display: flex; align-items: center; justify-content: center; gap: 22px; }
+.round { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line-2); font-size: 22px; display: grid; place-items: center; background: var(--bg); }
+.round:active { background: var(--raised-2); }
+.wps-num { font-size: 76px; line-height: .9; min-width: 70px; text-align: center; color: var(--accent); }
+.hint { text-align: center; color: var(--muted); margin: -4px 0 0; font-size: 13px; }
+.chips { display: flex; gap: 6px; justify-content: center; }
+.chips button { width: 40px; height: 34px; border-radius: 11px; background: var(--bg); border: 1px solid var(--line); font: 500 13px var(--mono); color: var(--muted); }
+.chips button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.screens { display: flex; flex-direction: column; gap: 6px; }
+.scr { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-radius: 16px; background: var(--raised); border: 1px solid var(--line); transition: border-color .15s; }
+.scr.now { border-color: var(--accent); }
+.scr .sp { width: 34px; height: 34px; border-radius: 50%; background: var(--bg); display: grid; place-items: center; flex: none; color: var(--accent); }
+.scr .sp svg { width: 13px; height: 13px; margin-left: 2px; }
+.scr .sw2 { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.scr .st { font: 11px var(--mono); color: var(--faint); }
+.scr .ws { display: flex; flex-wrap: wrap; gap: 4px; }
+.scr .em { width: 34px; height: 34px; border-radius: 11px; background: var(--bg); border: 1px dashed var(--line-2); display: grid; place-items: center; flex: none; font-size: 18px; color: var(--faint); }
+.scr .em.has { border-style: solid; }
+.tw { padding: 5px 8px; border-radius: 8px; font-size: 15px; background: var(--bg); }
+.tw:hover { background: var(--raised-2); }
+.tw.now { background: var(--accent-soft); color: var(--accent); }
+.tw.edited { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ---------- sheets */
+.veil { position: absolute; inset: 0; z-index: 40; background: rgba(5, 4, 8, .6); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); display: flex; flex-direction: column; justify-content: flex-end; animation: fade .2s; }
+@keyframes fade { from { opacity: 0; } }
+.sheet { background: var(--panel); border-radius: 30px 30px 0 0; border-top: 1px solid var(--line-2); padding: 10px 18px calc(22px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; animation: up .3s cubic-bezier(.2, 1, .3, 1); max-height: 94%; overflow-y: auto; }
+@keyframes up { from { transform: translateY(100%); } }
+.grab { width: 40px; height: 5px; border-radius: 5px; background: var(--line-2); margin: 0 auto 4px; flex: none; }
+.sheet h3 { margin: 0; font-size: 19px; }
+.sheet .sub { margin: -8px 0 0; color: var(--muted); font-size: 13px; }
+.sheet input[type=text] { height: 54px; border-radius: 15px; border: 1px solid var(--line-2); background: var(--bg); padding: 0 14px; font-size: 18px; outline: none; width: 100%; }
+.sheet input[type=text]:focus, .sheet textarea:focus { border-color: var(--accent); }
+.sheet textarea { width: 100%; height: 46vh; resize: none; border-radius: 15px; border: 1px solid var(--line-2); background: var(--bg); padding: 14px; font: 17px/1.6 var(--ui); outline: none; }
+.btnrow { display: flex; gap: 8px; }
+.btnrow .btn { flex: 1; }
+.player { height: min(54vh, 500px); border-radius: 22px; overflow: hidden; background: #000; flex: none; }
+.player video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.emgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.emgrid button { aspect-ratio: 1; border-radius: 12px; background: var(--raised); font-size: 22px; display: grid; place-items: center; }
+.emgrid button:hover { background: var(--raised-2); }
+
+/* ---------- result */
+.result { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 18px calc(18px + env(safe-area-inset-bottom, 0px)); gap: 14px; }
+.result .frame { flex: 1; min-height: 0; border-radius: var(--r-lg); overflow: hidden; background: #000; display: grid; place-items: center; border: 1px solid var(--line); }
+.result .frame video { width: 100%; height: 100%; object-fit: contain; }
+.result h2 { margin: 0; font-size: 46px; line-height: .95; }
+.fname { font: 12px var(--mono); color: var(--muted); word-break: break-all; margin: 0; }
+.e-num { font-size: 110px; line-height: .9; color: var(--accent); }
+
+.guide { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 12px); z-index: 5; padding: 16px; border-radius: 22px; background: var(--text); color: var(--bg); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 50px -14px rgba(0,0,0,.85); animation: rise .35s cubic-bezier(.2,1.2,.4,1); }
+.guide > b { font-size: 17px; }
+.guide ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.guide li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.guide li span { width: 24px; height: 24px; border-radius: 50%; background: var(--bg); color: var(--accent); display: grid; place-items: center; font: 600 12px var(--mono); flex: none; }
+.guide .btn { align-self: flex-start; background: var(--bg); color: var(--text); }
+@keyframes rise { from { transform: translateY(12px); opacity: 0; } }
+
+.toast { position: absolute; left: 50%; top: calc(72px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 60; width: max-content; max-width: calc(100% - 32px); padding: 11px 16px; border-radius: 15px; background: var(--text); color: var(--bg); font-weight: 600; font-size: 13px; box-shadow: 0 18px 40px -12px rgba(0,0,0,.7); animation: drop .25s ease-out; }
+@keyframes drop { from { transform: translate(-50%, -12px); opacity: 0; } }
+.toast.err { background: var(--danger); color: #1B0505; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="device" id="device">
+
+  <!-- ============ HOME ============ -->
+  <section class="view aurora" id="vHome">
+    <header class="appbar">
+      <div class="brand" aria-label="Cool Caps"><span class="cool"><span class="l1">C</span><span class="l2">O</span><span class="l3">O</span><span class="l4">L</span><svg class="spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0c.8 6.4 2.6 8.9 12 12-9.4 3.1-11.2 5.6-12 12-.8-6.4-2.6-8.9-12-12 9.4-3.1 11.2-5.6 12-12z" fill="#E8FDFF"/></svg><svg class="spark s2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0c.8 6.4 2.6 8.9 12 12-9.4 3.1-11.2 5.6-12 12-.8-6.4-2.6-8.9-12-12 9.4-3.1 11.2-5.6 12-12z" fill="#E8FDFF"/></svg></span><span class="hl">CAPS</span></div>
+      <button class="iconbtn" data-go="settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    </header>
+    <div class="scroll">
+      <h1 class="hello display">What are we captioning <span class="hl">today?</span></h1>
+      <p class="lede">Animated captions for Reels, TikTok and Shorts. Everything happens on your phone.</p>
+      <button class="hero-card footage" id="heroCard">
+        <span class="hero-tag" id="heroTag"><span>Style</span>karaoke</span>
+        <span class="cap-layer" id="heroCaps"></span>
+        <span class="hero-foot">
+          <span class="hf"><b>New video</b><span>Tap to choose, or drop a video here</span></span>
+          <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+        </span>
+      </button>
+      <div class="how">
+        <div><i>1</i><b>Add a video</b><span>Whisper writes the words, on your phone</span></div>
+        <div><i>2</i><b>Style it</b><span>Animation, font, effects</span></div>
+        <div><i>3</i><b>Export</b><span>Ready to post</span></div>
+      </div>
+      <div class="warn" id="warn" hidden></div>
+      <div class="install" id="installCard" hidden>
+        <img src="icon-192.png" alt="">
+        <div><b>Put Cool Caps on your home screen</b><span id="installHow">Opens full screen, like a real app.</span></div>
+        <button class="btn primary small" id="installBtn">Install</button>
+      </div>
+
+      <div class="sec-head"><h2>Quick styles</h2><span class="label">Tap to start</span></div>
+      <div class="hscroll" id="presets"></div>
+
+      <div class="sec-head"><h2>Recent</h2><button class="link" data-go="library">See all</button></div>
+      <div class="recent" id="recent"></div>
+    </div>
+  </section>
+
+  <!-- ============ LIBRARY ============ -->
+  <section class="view aurora" id="vLibrary" hidden>
+    <header class="appbar"><h1 class="display">Library</h1></header>
+    <div class="scroll"><div class="libgrid" id="libgrid"></div></div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="view aurora" id="vSettings" hidden>
+    <header class="appbar">
+      <button class="iconbtn bare" data-go="home" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <h1 class="display">Settings</h1>
+    </header>
+    <div class="scroll">
+      <div class="group" style="margin-top:4px">
+        <span class="label">Transcription</span>
+        <div class="card">
+          <div class="row stack">
+            <div class="rhead"><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+              <span class="rt"><b>Accuracy</b><span id="accNote"></span></span></div>
+            <div class="seg" id="accSeg"><button data-v="base">Fast</button><button data-v="small">Balanced</button><button data-v="medium">Best</button></div>
+          </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
+            <span class="rt"><b>Language</b><span>What's spoken in your videos</span></span>
+            <select class="sel" id="langSel" aria-label="Language"></select>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <span class="label">Plan</span>
+        <div class="card"><button class="row" id="planRow">
+          <span class="ri" style="background:var(--accent);color:var(--accent-ink)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg></span>
+          <span class="rt"><b>Cool Caps Pro</b><span id="planNote"></span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button></div>
+      </div>
+      <div class="group">
+        <span class="label">Captions</span>
+        <div class="card">
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6L20 9.4l-4 4 1 5.6-5-2.8-5 2.8 1-5.6-4-4 5.4-.8z"/></svg></span>
+            <span class="rt"><b>Remember my style</b><span>New videos start with your last look</span></span>
+            <button class="switch" id="rememberSw" role="switch" aria-label="Remember my style"></button>
+          </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></svg></span>
+            <span class="rt"><b>Reset caption style</b><span>Karaoke, 3 words, white and yellow</span></span>
+            <button class="btn ghost small" id="resetStyle">Reset</button>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <span class="label">Export</span>
+        <div class="card">
+          <div class="row stack">
+            <div class="rhead"><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg></span>
+              <span class="rt"><b>Video quality</b><span id="qNote"></span></span></div>
+            <div class="seg" id="qSeg"><button data-v="standard">Standard</button><button data-v="high">High</button><button data-v="max">Max</button></div>
+          </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></span>
+            <span class="rt"><b>Library storage</b><span id="libSize">Videos you make are kept on this phone</span></span>
+            <button class="btn ghost small" id="clearLib">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div class="group">
+        <span class="label">About</span>
+        <div class="card">
+          <div class="row"><span class="rt"><b>Speech engine</b><span id="stWhisper"></span></span></div>
+          <div class="row"><span class="rt"><b>Video engine</b><span id="stFfmpeg"></span></span></div>
+          <div class="row"><span class="rt"><b>Caption fonts</b><span id="stFonts"></span></span></div>
+          <div class="row"><span class="rt"><b>Cool Caps</b><span id="stVer"></span></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EDITOR ============ -->
+  <section class="view" id="vEditor" hidden>
+    <header class="appbar">
+      <button class="iconbtn bare" id="edBack" aria-label="Back to home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="ed-title"><b id="fileName"></b><span id="fileMeta"></span></div>
+      <button class="pill" id="exportBtn" disabled>Export <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+    </header>
+    <div class="stage" id="stage">
+      <video id="video" playsinline preload="auto"></video>
+      <div class="cap-layer" id="caps"></div>
+      <div class="gline v" id="gV" hidden></div>
+      <div class="gline h" id="gH" hidden></div>
+      <button class="pv-play" id="playBtn" aria-label="Play or pause"><span id="playIcon"></span><span id="tNow">0:00.0</span></button>
+      <div class="drag-hint" id="dragHint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>Drag captions to move</div>
+      <div class="working" id="working" hidden>
+        <div class="w-num display" id="wNum">0%</div>
+        <div class="w-stage" id="wStage"></div>
+        <div class="w-bar" id="wBarWrap"><i id="wBar"></i></div>
+        <p class="w-note" id="wNote"></p>
+        <button class="btn ghost small" id="wBack" hidden>Go back</button>
+      </div>
+    </div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="1" step="0.01" value="0" aria-label="Position in video"></div>
+    <div class="tools locked" id="tools">
+      <div class="tool-panel" id="toolPanel">
+
+        <div class="tpane" data-pane="style">
+          <div class="phead"><b>Animation</b><span>Each one comes with its own look. Tap to try it, then tweak it in Font, Look and Effects.</span></div>
+          <div id="styleSections"></div>
+        </div>
+
+        <div class="tpane" data-pane="font" hidden>
+          <div class="phead"><b>Font</b><span>The lettering of your captions.</span></div>
+          <div class="sgrid" id="fontRow"></div>
+        </div>
+
+        <div class="tpane" data-pane="look" hidden>
+          <div class="phead"><b>Look</b><span>Size, colours and where the captions sit.</span></div>
+          <div class="grp">
+            <div class="grp-title">Text size</div>
+            <div class="opts" id="sizeSeg"></div>
+            <div class="slider"><div class="sl-top">Fine-tune size<span id="scVal"></span></div><input type="range" id="scR" min="50" max="250" step="5" aria-label="Text size"></div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Colours</div>
+            <span class="label">Text</span><div class="swrow" id="colorSw"></div>
+            <span class="label" id="hlLabel">Highlight (the word being said)</span><div class="swrow" id="hlSw"></div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Position <small>or drag it on the video</small></div>
+            <div class="opts" id="posSeg"></div>
+            <div class="slider"><div class="sl-top">Left / right<span id="xVal"></span></div><input type="range" id="xR" min="0" max="100" step="1" aria-label="Left or right"></div>
+            <div class="slider"><div class="sl-top">Up / down<span id="yVal"></span></div><input type="range" id="yR" min="0" max="100" step="1" aria-label="Up or down"></div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Text layout</div>
+            <div class="slider"><div class="sl-top">Line spacing<span id="lineVal"></span></div><input type="range" id="lineR" min="70" max="170" step="5" aria-label="Line spacing"></div>
+            <div class="slider"><div class="sl-top">Text width<span id="wVal"></span></div><input type="range" id="wR" min="40" max="100" step="5" aria-label="Text width"></div>
+            <div class="inline-row"><div><b>ALL CAPS</b><span>Every word in capitals</span></div><button class="switch" id="capsSw" role="switch" aria-label="All caps"></button></div>
+          </div>
+        </div>
+
+        <div class="tpane" data-pane="fx" hidden>
+          <div class="phead"><b>Effects</b><span>Outline, shadow, glow, background and emojis.</span></div>
+          <div class="grp">
+            <div class="grp-title">Outline</div>
+            <div class="opts" id="olSeg"></div>
+            <span class="label">Outline colour</span><div class="swrow" id="olSw"></div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Shadow &amp; glow</div>
+            <div class="opts" id="shSeg"></div>
+            <div class="inline-row"><div><b>Glow</b><span>A soft glow in your highlight colour</span></div><button class="switch" id="glowSw" role="switch" aria-label="Glow"></button></div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Background</div>
+            <div class="opts" id="bgSeg"></div>
+            <div id="bgMore">
+              <span class="label">Background colour</span><div class="swrow" id="bgSw"></div>
+              <div class="slider"><div class="sl-top">See-through<span id="baVal"></span></div><input type="range" id="baR" min="0" max="90" step="5" aria-label="See-through"></div>
+            </div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Emojis <span class="tag p">New</span></div>
+            <div class="inline-row"><div><b>Auto emojis</b><span>Adds a matching emoji to key words</span></div><button class="switch" id="emojiSw" role="switch" aria-label="Auto emojis"></button></div>
+            <div class="seg" id="esSeg"><button data-v="s">Small</button><button data-v="m">Medium</button><button data-v="l">Large</button></div>
+            <span class="label" style="text-transform:none;letter-spacing:0;font-weight:500">Change or remove an emoji in the Transcript tab.</span>
+          </div>
+        </div>
+
+        <div class="tpane" data-pane="words" hidden>
+          <div class="phead"><b>Words on screen</b><span>How many words show at once.</span></div>
+          <div class="grp">
+            <div class="wps"><button class="round" id="wpsMinus" aria-label="Fewer words">&minus;</button><div class="wps-num display" id="wpsNum">3</div><button class="round" id="wpsPlus" aria-label="More words">+</button></div>
+            <div class="chips" id="wpsChips"></div>
+            <p class="hint" id="wpsHint"></p>
+          </div>
+          <div class="grp"><div class="inline-row"><div><b>Smart breaks</b><span>Start a new screen at the end of a sentence</span></div><button class="switch" id="smartSw" role="switch" aria-label="Smart breaks"></button></div></div>
+        </div>
+
+        <div class="tpane" data-pane="text" hidden>
+          <div class="phead"><b>Transcript</b><span>One row per caption screen. ▶ plays it, tap a word to fix it, tap the emoji box to change it.</span></div>
+          <button class="btn ghost block" id="editText"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit as text</button>
+          <div class="screens" id="transcript"></div>
+        </div>
+      </div>
+      <div class="guide" id="guide" hidden>
+        <b>Your captions are ready</b>
+        <ol><li><span>1</span>Pick an&nbsp;<b>Animation</b></li><li><span>2</span>Make it yours in&nbsp;<b>Look</b>&nbsp;and&nbsp;<b>Effects</b></li><li><span>3</span>Check the&nbsp;<b>Transcript</b>&nbsp;for wrong words</li><li><span>4</span>Tap&nbsp;<b>Export</b>&nbsp;at the top</li></ol>
+        <button class="btn primary small" id="guideOk">Got it</button>
+      </div>
+      <nav class="toolbar" id="toolbar" role="tablist"></nav>
+    </div>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section class="view aurora" id="vResult" hidden>
+    <header class="appbar">
+      <button class="iconbtn bare" id="resBack" aria-label="Back to editing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="ed-title"><b id="resTitle">Exporting</b></div>
+      <span style="width:44px"></span>
+    </header>
+    <div class="result" id="result"></div>
+  </section>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tb" data-go="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+    <button class="plus" id="plusBtn" aria-label="New video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="tb" data-go="library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>Library</button>
+  </nav>
+
+  <input type="file" id="pick" accept="video/*,.mov,.mkv" hidden>
+  <div id="layer"></div>
+</div>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svg = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
+const ICON = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.4-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>',
+  chev: svg('<path d="M9 6l6 6-6 6"/>', 'class="chev" stroke-width="2.4"'),
+  style: svg('<path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
+  font: svg('<path d="M4 20L10 4h1l6 16M6.5 14h8M15 20h5"/>'),
+  look: svg('<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.3"/><circle cx="12" cy="7.5" r="1.3"/><circle cx="15.5" cy="10" r="1.3"/><path d="M12 21a2.5 2.5 0 0 1 0-5h1.5a2.5 2.5 0 0 0 2.5-2.5"/>'),
+  fx: svg('<path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8l1.4 1.4M17.8 6.2l1.4-1.4M12.2 6.2L10.8 4.8"/><path d="M3 21l9-9"/>'),
+  words: svg('<rect x="3" y="6" width="5" height="12" rx="1.5"/><rect x="10" y="6" width="5" height="12" rx="1.5"/><rect x="17" y="6" width="4" height="12" rx="1.5"/>'),
+  text: svg('<path d="M4 6h16M4 11h16M4 16h10"/><path d="M15 20l1-3 4.5-4.5 2 2L18 19z"/>'),
+};
+
+let INFO = null;
+const FONT = {};
+let fontsVersion = 0;
+
+/* ===================== caption engine =====================
+   Everything is drawn on a canvas, in video pixels, by drawFrame(). The live preview, the demo
+   cards and the export all call it, so the exported video matches the preview exactly. */
+const SENTENCE_END = /[.!?…]$/, SOFT_BREAK = /[,;:]$/;
+function groupWords(words, per, smart, gap) {
+  const ws = words.map((w) => ({ ...w })), groups = []; let cur = [];
+  for (let i = 0; i < ws.length; i++) {
+    const w = ws[i], nxt = ws[i + 1]; cur.push(w); let brk = false;
+    if (smart && nxt) {
+      if (SENTENCE_END.test(w.word)) brk = true;
+      else if (nxt.start - w.end > gap) brk = true;
+      else if (SOFT_BREAK.test(w.word) && cur.length >= Math.max(2, per - 1)) brk = true;
+    }
+    if (cur.length >= per || brk || !nxt) { groups.push(cur); cur = []; }
+  }
+  for (let a = 0; a < groups.length - 1; a++) { const A = groups[a], B = groups[a + 1]; if (B[0].start - A[A.length - 1].end < gap) A[A.length - 1].end = B[0].start; }
+  return groups;
+}
+function findGroup(groups, t) {
+  let lo = 0, hi = groups.length - 1, ans = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (groups[m][0].start <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
+  if (ans >= 0) { const g = groups[ans]; if (t < g[g.length - 1].end) return ans; }
+  return -1;
+}
+const lerp = (a, b, f) => a + (b - a) * Math.min(1, Math.max(0, f));
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const easeOutBack = (x, s = 1.70158) => { x = clamp01(x); const c = s + 1; return 1 + c * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2); };
+const easeOutExpo = (x) => { x = clamp01(x); return x === 1 ? 1 : 1 - Math.pow(2, -10 * x); };
+const easeInCubic = (x) => { x = clamp01(x); return x * x * x; };
+const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const burst = (d, dur) => (d < 0 || d > dur ? 0 : 1 - d / dur);
+
+const STYLE_GROUPS = [
+  ["Simple", "", {
+    karaoke: "The spoken word lights up", bounce: "Spoken word lights up and punches bigger", pop: "Each screen pops in",
+    typewriter: "Words appear as they're said", fade: "Soft fade in and out", plain: "Clean, no animation" }],
+  ["Trendy", "y", {
+    box: "Highlight box slides word to word", underline: "A bar slides under each word", neon: "Glowing neon sign",
+    gradient: "Two-colour text, words rise in", wave: "Words float on a wave", blur: "Words sharpen out of a blur" }],
+  ["Kinetic", "p", {
+    stack: "Bold poster block", slam: "One giant word with camera shake", spin: "Words whip into place",
+    letters: "Letters drop in one by one", glitch: "RGB split and glitch bursts", zoom: "Rushes in, flies past the camera" }],
+];
+const KIN = STYLE_GROUPS[2][2];
+const ALL_STYLES = Object.assign({}, ...STYLE_GROUPS.map((g) => g[2]));
+const NO_HL = new Set(["fade", "plain", "blur"]);
+// Free vs Pro. Flip LOCK_PRO to true once payments are added: Pro styles then open the upgrade screen.
+const LOCK_PRO = false;
+const PRO = new Set([...Object.keys(STYLE_GROUPS[1][2]), ...Object.keys(KIN)]);
+const isLocked = (style) => LOCK_PRO && PRO.has(style);
+// Every animation comes with its own signature look (like a template). Users can change it all after.
+const STYLE_LOOKS = {
+  karaoke:    { font: "poppins",  color: "#FFFFFF", highlight: "#FFE600", outline: "medium", outline_color: "#000000", shadow: "soft", upper: true },
+  bounce:     { font: "anton",    color: "#FFFFFF", highlight: "#39FF14", outline: "thick",  outline_color: "#000000", shadow: "hard", upper: true },
+  pop:        { font: "luckiest", color: "#FF2D95", highlight: "#FFE600", outline: "thick",  outline_color: "#FFFFFF", shadow: "hard", upper: true },
+  typewriter: { font: "archivo",  color: "#FFFFFF", highlight: "#00E5FF", outline: "none",   shadow: "off", bg: "box", bg_color: "#0B0A0F", bg_alpha: 0.2, upper: false },
+  fade:       { font: "montserrat",    color: "#FFFFFF", highlight: "#FFE600", outline: "none",   shadow: "off", bg: "bar", bg_color: "#000000", bg_alpha: 0.35, upper: false },
+  plain:      { font: "archivo", color: "#FFFFFF", highlight: "#FFE600", outline: "thin", outline_color: "#000000", shadow: "soft", upper: false },
+  box:        { font: "poppins",  color: "#FFFFFF", highlight: "#8B3DFF", outline: "medium", outline_color: "#000000", shadow: "soft", upper: true },
+  underline:  { font: "bebas",    color: "#FFFFFF", highlight: "#FFE600", outline: "none",   shadow: "hard", upper: true },
+  neon:       { font: "marker",   color: "#FFD6EC", highlight: "#FF2D95", outline: "none",   shadow: "off", upper: false },
+  gradient:   { font: "luckiest", color: "#FFE600", highlight: "#FF2D95", outline: "thick",  outline_color: "#2A0F3D", shadow: "hard", upper: true },
+  wave:       { font: "bangers",  color: "#FFFFFF", highlight: "#00E5FF", outline: "thick",  outline_color: "#000000", shadow: "hard", upper: true },
+  blur:       { font: "bebas",    color: "#FFFFFF", highlight: "#FFFFFF", outline: "none",   shadow: "soft", upper: true },
+  stack:      { font: "anton",    color: "#FFFFFF", highlight: "#FFE600", outline: "medium", outline_color: "#000000", shadow: "hard", upper: true },
+  slam:       { font: "anton",    color: "#FFFFFF", highlight: "#FF3B30", outline: "thick",  outline_color: "#000000", shadow: "hard", upper: true },
+  spin:       { font: "archivo",  color: "#FFFFFF", highlight: "#FF8A00", outline: "medium", outline_color: "#000000", shadow: "soft", upper: true },
+  letters:    { font: "luckiest", color: "#FFFFFF", highlight: "#FFE600", outline: "thick",  outline_color: "#000000", shadow: "hard", upper: true },
+  glitch:     { font: "archivo",  color: "#FFFFFF", highlight: "#00E5FF", outline: "thin",   outline_color: "#000000", shadow: "off", upper: true },
+  zoom:       { font: "bebas",    color: "#FFFFFF", highlight: "#FFE600", outline: "medium", outline_color: "#000000", shadow: "soft", glow: true, upper: true },
+};
+const OUTLINE = { none: 0, thin: 0.035, medium: 0.07, thick: 0.115 };
+const SHADOW = { off: null, soft: { a: 0.55, blur: 0.2, off: 0.05 }, hard: { a: 0.95, blur: 0, off: 0.075 } };
+const EMOJI_SIZE = { s: 1.0, m: 1.4, l: 1.9 };
+const POS_Y = { top: 0.22, middle: 0.5, bottom: 0.78 };
+const SIZES = { small: 0.75, medium: 1, large: 1.3, xl: 1.6 };
+const EMOJI_FONT = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+
+const EMOJI_MAP = (() => {
+  const src = "money,dollar,dollars,cash,rich,pay,paid,salary,income,earn,earned,hundred,thousand,million,billion,price,cost,budget,save,savings,profit:💰|tax,taxes,irs,receipt,bill,bills:🧾|fire,hot,lit:🔥|love,heart,loved:❤️|laugh,funny,lol,joke,hilarious:😂|idea,think,thinking,tip,tips,hack:💡|clock,hour,hours,minute,minutes,late,deadline:⏰|win,won,winner,best,champion,victory:🏆|food,eat,eating,hungry,burger,dinner,lunch:🍔|car,drive,driving:🚗|home,house:🏠|work,job,business,office,boss,career:💼|phone,iphone:📱|music,song,songs:🎵|sad,cry,crying:😢|wow,crazy,insane,shocking,unbelievable:🤯|secret,nobody,quiet:🤫|warning,careful,danger,mistake,mistakes:⚠️|correct,approved:✅|never,wrong:❌|fast,quick,quickly,speed:⚡|grow,growth,increase:📈|lose,loss,drop:📉|launch,rocket:🚀|gym,strong,workout,muscle:💪|sleep,tired:😴|coffee,morning:☕|world,global,everyone:🌍|star,amazing,perfect:⭐|gift,free:🎁|party,celebrate,birthday:🎉|why,how,question:🤔|look,watch,eyes:👀|brain,smart,learn,learning,study:🧠|dog:🐶|cat:🐱|school,book,books:📚|video,camera,film:🎥|game,games,gaming:🎮|travel,trip,plane,fly:✈️|beach,summer:🏖️|health,doctor,sick:🩺|baby:👶|friend,friends,together,deal:🤝|cold,ice,freezing:🥶|hit,boom,explode,bang:💥|cool:😎|scared,scary,afraid:😱|happy,smile:😊|angry,mad:😡|water,drink:💧|plant,nature,tree:🌱|night,moon:🌙|key,unlock:🔑|lock,private:🔒|target,goal,goals:🎯|chart,data,numbers:📊|news:📰|gold:🥇|diamond:💎|king,queen:👑|ghost:👻|shopping,buy,bought,sale:🛍️|break:🔨|keep:🙌";
+  const m = {}; src.split("|").forEach((part) => { const [ws, e] = part.split(":"); ws.split(",").forEach((w) => (m[w] = e)); }); return m;
+})();
+function autoEmoji(word) {
+  const w = word.toLowerCase().replace(/[^a-z']/g, "").replace(/'s$/, "");
+  for (const c of [w, w.replace(/s$/, ""), w.replace(/es$/, ""), w.replace(/ing$/, ""), w.replace(/ed$/, ""), w.replace(/ly$/, "")]) if (c.length > 1 && EMOJI_MAP[c]) return EMOJI_MAP[c];
+  return null;
+}
+function groupEmoji(g, s) {
+  const ex = g.find((w) => w.emoji); if (ex) return { e: ex.emoji, w: ex };
+  if (g.some((w) => w.emoji === "")) return null;
+  if (!s.emoji) return null;
+  for (const w of g) { const e = autoEmoji(w.word); if (e) return { e, w }; }
+  return null;
+}
+
+const kFont = (s, px) => { const f = FONT[s.font]; return `${f ? f.w : 400} ${px}px "${f ? f.css : "Impact"}", Impact, "Arial Black", sans-serif`; };
+const up = (s, w) => (s.upper ? w.toUpperCase() : w);
+const devScale = (ctx) => { const m = ctx.getTransform(); return Math.hypot(m.a, m.b) || 1; };
+function hexA(hex, a) { const n = parseInt(String(hex).replace("#", ""), 16) || 0; return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
+function lum(hex) { const n = parseInt(String(hex).replace("#", ""), 16) || 0; return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; }
+function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, Math.max(0, Math.min(r, h / 2, w / 2))); else ctx.rect(x, y, w, h); }
+
+function baseSize(vw, vh, s) { return s.size || Math.round(Math.min(vh * 0.05, vw * 0.09) * (SIZES[s.text_size] || 1) * (s.scale || 1)); }
+function basePx(vw, vh, s) { const ratio = FONT[s.font] ? FONT[s.font].ratio : 0.85; return baseSize(vw, vh, s) * ratio * (KIN[s.style] ? 1.3 : 1); }
+
+/* text with outline, shadow and glow. fill may be a colour or a gradient. */
+function textFX(ctx, s, text, x, y, px, fill, o = {}) {
+  const ol = o.noOutline ? 0 : px * (OUTLINE[s.outline] ?? 0.07), ds = devScale(ctx);
+  ctx.lineJoin = "round"; ctx.miterLimit = 2;
+  const paint = () => { if (ol > 0) { ctx.lineWidth = ol * 2; ctx.strokeStyle = s.outline_color; ctx.strokeText(text, x, y); } ctx.fillStyle = fill; ctx.fillText(text, x, y); };
+  const sh = o.noShadow ? null : SHADOW[s.shadow];
+  if (sh) { ctx.save(); ctx.shadowColor = `rgba(0,0,0,${sh.a})`; ctx.shadowBlur = px * sh.blur * ds; ctx.shadowOffsetX = ctx.shadowOffsetY = px * sh.off * ds; paint(); ctx.restore(); }
+  if (s.glow || o.glow) {
+    ctx.save(); ctx.shadowColor = o.glowColor || s.highlight;
+    ctx.shadowBlur = px * 0.5 * ds; paint(); ctx.shadowBlur = px * 0.22 * ds; paint(); ctx.restore();
+  }
+  paint();
+}
+
+function layoutBlock(ctx, s, vw, g, px) {
+  ctx.font = kFont(s, px);
+  const space = ctx.measureText(" ").width, maxW = vw * s.maxw;
+  const items = g.map((w, j) => { const text = up(s, w.word); return { w, j, text, width: ctx.measureText(text).width }; });
+  const lines = []; let cur = [], cw = 0;
+  for (const it of items) {
+    const add = (cur.length ? space : 0) + it.width;
+    if (cur.length && cw + add > maxW) { lines.push({ items: cur, width: cw }); cur = [it]; cw = it.width; } else { cur.push(it); cw += add; }
+  }
+  if (cur.length) lines.push({ items: cur, width: cw });
+  const lh = px * 1.12 * s.line, blockH = lines.length * lh, blockW = Math.max(...lines.map((l) => l.width));
+  lines.forEach((ln, li) => {
+    let x = -ln.width / 2; ln.y = -blockH / 2 + lh * (li + 0.5);
+    ln.items.forEach((it) => { it.x = x + it.width / 2; it.y = ln.y; it.left = x; x += it.width + space; });
+  });
+  return { items, lines, blockW, blockH, lh, space };
+}
+function anchorFor(s, vw, vh, bw, bh) {
+  const mx = vw * 0.03, my = vh * 0.03;
+  const cx = bw >= vw - 2 * mx ? vw / 2 : clamp(s.x * vw, bw / 2 + mx, vw - bw / 2 - mx);
+  const cy = bh >= vh - 2 * my ? vh / 2 : clamp(s.y * vh, bh / 2 + my, vh - bh / 2 - my);
+  return { cx, cy };
+}
+function drawBg(ctx, s, lay, px) {
+  if (s.bg === "off") return;
+  ctx.save(); ctx.fillStyle = hexA(s.bg_color, 1 - s.bg_alpha);
+  const padX = px * 0.34, padY = px * 0.16, r = px * 0.3;
+  if (s.bg === "box" || !lay.lines.length) { rrect(ctx, -lay.blockW / 2 - padX, -lay.blockH / 2 - padY, lay.blockW + 2 * padX, lay.blockH + 2 * padY, r); ctx.fill(); }
+  else lay.lines.forEach((ln) => { rrect(ctx, -ln.width / 2 - padX * 0.7, ln.y - lay.lh / 2 + px * 0.03, ln.width + padX * 1.4, lay.lh - px * 0.06, r * 0.8); ctx.fill(); });
+  ctx.restore();
+}
+function drawEmoji(ctx, s, g, t, cx, top, bottom, px, vh) {
+  const pick = groupEmoji(g, s); if (!pick) return;
+  const d = t - pick.w.start; if (d < 0) return;
+  const epx = px * EMOJI_SIZE[s.emoji_size || "m"];
+  let ey = top - epx * 0.65; if (ey - epx / 2 < vh * 0.03) ey = bottom + epx * 0.65;
+  const p = easeOutBack(d / 0.32, 2.6);
+  ctx.save(); ctx.translate(cx, ey + Math.sin(t * 3.2) * epx * 0.04); ctx.rotate((1 - p) * -0.6 + Math.sin(t * 2.4) * 0.06); ctx.scale(p, p);
+  ctx.font = `${epx}px ${EMOJI_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#000"; ctx.fillText(pick.e, 0, 0);
+  ctx.restore();
+}
+const popScale = (dt) => (dt < 90 ? lerp(0.7, 1.12, dt / 90) : dt < 170 ? lerp(1.12, 1, (dt - 90) / 80) : 1);
+
+function drawFrame(ctx, vw, vh, groups, t, s) {
+  const gi = findGroup(groups, t);
+  if (gi < 0) return null;
+  const g = groups[gi], gs = g[0].start, ge = g[g.length - 1].end, dtg = (t - gs) * 1000;
+  let ai = 0; for (let j = 0; j < g.length; j++) if (g[j].start <= t) ai = j;
+  const px = basePx(vw, vh, s), st = s.style;
+  const col = (j) => (j === ai && !NO_HL.has(st) ? s.highlight : s.color);
+  const exitK = (dur) => (ge - t < dur ? 1 - (ge - t) / dur : 0);
+  let box = null;
+  ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+
+  if (st === "stack") {
+    const lines = []; let cur = [];
+    g.forEach((w, j) => {
+      const text = up(s, w.word); cur.push({ w, j, text });
+      const short = text.replace(/[^\p{L}\p{N}]/gu, "").length <= 3 && cur.length < 2 && j < g.length - 1;
+      if (!short) { lines.push(cur); cur = []; }
+    });
+    if (cur.length) lines.push(cur);
+    const targetW = vw * s.maxw * 0.95;
+    ctx.font = kFont(s, 100);
+    const space = ctx.measureText(" ").width / 100;
+    const info = lines.map((items) => {
+      const w100 = items.reduce((a, it) => a + ctx.measureText(it.text).width / 100, 0) + space * (items.length - 1);
+      return { items, px: Math.max(px * 0.7, Math.min(targetW / w100, px * 2.6)), w100 };
+    });
+    let totalH = info.reduce((a, l) => a + l.px * 0.96 * s.line, 0);
+    const maxH = vh * 0.46; if (totalH > maxH) { const k = maxH / totalH; info.forEach((l) => (l.px *= k)); totalH = maxH; }
+    const bw = Math.max(...info.map((l) => l.w100 * l.px)), { cx, cy } = anchorFor(s, vw, vh, bw, totalH), ex = easeInCubic(exitK(0.12));
+    box = { x0: cx - bw / 2, x1: cx + bw / 2, y0: cy - totalH / 2, y1: cy + totalH / 2 };
+    ctx.translate(cx, cy); ctx.scale(1 - 0.18 * ex, 1 - 0.18 * ex); ctx.globalAlpha = 1 - ex; ctx.rotate(-0.035);
+    drawBg(ctx, s, { blockW: bw, blockH: totalH, lines: [], lh: px }, px);
+    let y = -totalH / 2;
+    for (const l of info) {
+      const lh = l.px * 0.96 * s.line, ly = y + lh / 2; y += lh;
+      ctx.font = kFont(s, l.px);
+      const sp = space * l.px, widths = l.items.map((it) => ctx.measureText(it.text).width);
+      let x = -(widths.reduce((a, b) => a + b, 0) + sp * (l.items.length - 1)) / 2;
+      l.items.forEach((it, k) => {
+        const wx = x + widths[k] / 2; x += widths[k] + sp;
+        const d = t - it.w.start; if (d < 0) return;
+        const sc = 1.6 + (1 - 1.6) * easeOutBack(d / 0.24, 2.4);
+        ctx.save(); ctx.globalAlpha *= clamp01(d / 0.05); ctx.translate(wx, ly); ctx.scale(sc, sc);
+        textFX(ctx, s, it.text, 0, 0, l.px, col(it.j)); ctx.restore();
+      });
+    }
+  } else if (st === "slam") {
+    const w = g[ai], text = up(s, w.word), seed = Math.round(w.start * 100);
+    ctx.font = kFont(s, 100);
+    const tw100 = ctx.measureText(text).width / 100;
+    const big = Math.min(px * 2.3, vw * s.maxw * 0.95 / tw100);
+    const { cx, cy } = anchorFor(s, vw, vh, tw100 * big, big);
+    box = { x0: cx - tw100 * big / 2, x1: cx + tw100 * big / 2, y0: cy - big / 2, y1: cy + big / 2 };
+    const d = t - w.start;
+    const prev = ai > 0 ? g[ai - 1] : gi > 0 && groups[gi - 1].at(-1).end >= gs - 0.05 ? groups[gi - 1].at(-1) : null;
+    if (prev) {
+      ctx.save(); ctx.globalAlpha = 0.22 * (1 - clamp01(d / 0.6)); ctx.font = kFont(s, big * 0.5);
+      ctx.translate(cx, cy - big * 0.75); textFX(ctx, s, up(s, prev.word), 0, 0, big * 0.5, s.color); ctx.restore();
+    }
+    const sc = 1 + 1.7 * (1 - easeOutExpo(d / 0.16));
+    let dx = 0, dy = 0;
+    if (d > 0.08 && d < 0.5) { const amp = big * 0.06 * Math.exp(-(d - 0.08) * 11); dx = amp * Math.sin(d * 95 + seed); dy = amp * Math.cos(d * 81 + seed); }
+    ctx.font = kFont(s, big); ctx.globalAlpha = clamp01(d / 0.05);
+    ctx.translate(cx + dx, cy + dy); ctx.rotate((hash(seed) - 0.5) * 0.12); ctx.scale(sc, sc);
+    drawBg(ctx, s, { blockW: tw100 * big, blockH: big * 1.05, lines: [], lh: big }, big);
+    textFX(ctx, s, text, 0, 0, big, seed % 2 ? s.highlight : s.color);
+  } else {
+    const lay = layoutBlock(ctx, s, vw, g, px), { cx, cy } = anchorFor(s, vw, vh, lay.blockW, lay.blockH);
+    box = { x0: cx - lay.blockW / 2, x1: cx + lay.blockW / 2, y0: cy - lay.blockH / 2, y1: cy + lay.blockH / 2 };
+    ctx.font = kFont(s, px);
+    ctx.translate(cx, cy);
+    let gsc = 1;
+    if (st === "pop" || ((st === "karaoke" || st === "bounce" || st === "box" || st === "underline") && ai === 0)) gsc = popScale(dtg);
+    if (st === "pop") ctx.rotate((1 - clamp01(dtg / 260)) * (gi % 2 ? 0.14 : -0.14) + Math.sin(t * 3) * 0.015);
+    if (st === "fade") ctx.globalAlpha = Math.max(0, Math.min(1, (t - gs) / 0.12, (ge - t) / 0.08));
+    if (st === "zoom") {
+      const dIn = t - gs, ex = easeInCubic(exitK(0.16));
+      gsc = (0.2 + 0.8 * easeOutExpo(dIn / 0.35)) * (1 + 2.4 * ex);
+      ctx.rotate((1 - easeOutExpo(dIn / 0.35)) * -0.18); ctx.globalAlpha = clamp01(dIn / 0.1) * (1 - ex);
+    }
+    if (st === "spin" || st === "letters") ctx.globalAlpha = 1 - easeInCubic(exitK(0.1));
+    if (st === "neon" && t - gs < 0.4) ctx.globalAlpha = hash(Math.floor(t * 30)) > 0.35 ? 1 : 0.2;
+    if (gsc !== 1) ctx.scale(gsc, gsc);
+    drawBg(ctx, s, lay, px);
+
+    const items = lay.items;
+    const slideRect = (padX, f) => {
+      const cur = items[ai], prv = items[Math.max(0, ai - 1)], k = ai === 0 ? 1 : easeOutExpo((t - g[ai].start) / 0.13);
+      const R = (it) => ({ x: it.left - padX, y: it.y, w: it.width + padX * 2 });
+      const a = R(prv), b = R(cur);
+      f(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.w, b.w, k));
+    };
+    if (st === "box") slideRect(px * 0.14, (x, y, w) => { ctx.save(); ctx.fillStyle = s.highlight; rrect(ctx, x, y - px * 0.56, w, px * 1.12, px * 0.22); ctx.fill(); ctx.restore(); });
+    if (st === "underline") slideRect(0, (x, y, w) => { ctx.save(); ctx.fillStyle = s.highlight; rrect(ctx, x, y + px * 0.5, w, px * 0.13, px * 0.07); ctx.fill(); ctx.restore(); });
+
+    if (st === "glitch") {
+      const fr = Math.floor(t * 24), inten = Math.max(burst(t - gs, 0.25), 0.7 * burst(t - g[ai].start, 0.16));
+      const off = px * 0.012 + px * 0.09 * inten;
+      const drawAll = (dx) => {
+        ctx.save(); ctx.globalAlpha *= 0.85;
+        items.forEach((it) => { ctx.fillStyle = "#FF1F4B"; ctx.fillText(it.text, it.x - off + dx, it.y); ctx.fillStyle = "#00E5FF"; ctx.fillText(it.text, it.x + off + dx, it.y); });
+        ctx.restore();
+        items.forEach((it) => textFX(ctx, s, it.text, it.x + dx, it.y, px, col(it.j)));
+      };
+      ctx.translate((hash(fr) - 0.5) * px * 0.15 * inten, 0);
+      drawAll(0);
+      if (inten > 0.15) for (let n = 0; n < 3; n++) {
+        const y0 = -lay.blockH / 2 + hash(fr * 3 + n) * lay.blockH, bh = px * (0.12 + hash(fr * 5 + n) * 0.25), dx = (hash(fr * 7 + n) - 0.5) * px * 0.9 * inten;
+        ctx.save(); ctx.beginPath(); ctx.rect(-vw, y0, vw * 2, bh); ctx.clip(); ctx.clearRect(-vw, y0, vw * 2, bh); drawAll(dx); ctx.restore();
+      }
+    } else {
+      items.forEach((it) => {
+        const j = it.j, d = t - it.w.start, wd = d * 1000;
+        let sc = 1, dy = 0, alpha = 1, rot = 0, fill = col(j), o = {};
+        if (st === "bounce" && j === ai) { sc = wd < 120 ? lerp(1.25, 1.08, wd / 120) : 1.08; dy = -Math.sin(clamp01(wd / 260) * Math.PI) * px * 0.24; }
+        else if (st === "typewriter") { if (j > ai) return; if (j === ai) sc = wd < 100 ? lerp(1.15, 1, wd / 100) : 1; }
+        else if (st === "box" && j === ai) { fill = lum(s.highlight) > 0.6 ? "#111111" : "#FFFFFF"; o = { noOutline: true, noShadow: true }; }
+        else if (st === "underline") { fill = s.color; if (j === ai) sc = 1.04; }
+        else if (st === "neon") { o = { glow: true, glowColor: s.highlight }; fill = j === ai ? "#FFFFFF" : s.color; }
+        else if (st === "gradient") {
+          if (d < 0) return;
+          dy = (1 - easeOutExpo(d / 0.3)) * px * 0.45; alpha = clamp01(d / 0.12);
+          const gr = ctx.createLinearGradient(0, it.y + dy - px * 0.45, 0, it.y + dy + px * 0.45); gr.addColorStop(0, s.color); gr.addColorStop(1, s.highlight); fill = gr;
+        } else if (st === "wave") { dy = Math.sin(t * 4.2 + j * 0.9) * px * 0.12; rot = Math.sin(t * 3.1 + j * 1.3) * 0.06; fill = j % 2 ? s.highlight : s.color; if (j === ai) { sc = 1.12; fill = j % 2 ? s.color : s.highlight; } }
+        else if (st === "blur") {
+          if (d < 0) return;
+          const p = easeOutExpo(d / 0.35); alpha = p; sc = lerp(1.25, 1, p);
+          if (p < 0.999) ctx.filter = `blur(${((1 - p) * px * 0.22 * devScale(ctx)).toFixed(2)}px)`;
+        } else if (st === "spin") {
+          if (d < 0) return;
+          const p = easeOutBack(d / 0.38, 1.9); rot = (j % 2 ? 1 : -1) * (1 - p) * Math.PI / 2; sc = 0.3 + 0.7 * p; alpha = clamp01(d / 0.08);
+        } else if (st === "letters") {
+          if (d < 0) return;
+          const chars = [...it.text]; let prefix = "";
+          chars.forEach((ch, k) => {
+            const cw = ctx.measureText(ch).width, cxx = it.left + ctx.measureText(prefix).width + cw / 2; prefix += ch;
+            const local = d - k * 0.035; if (local < 0) return;
+            const p = easeOutBack(local / 0.3, 2.4);
+            ctx.save(); ctx.globalAlpha *= clamp01(local / 0.06); ctx.translate(cxx, it.y - (1 - p) * px * 0.75); ctx.rotate((1 - p) * (hash(k + it.w.start * 10) - 0.5) * 0.9);
+            textFX(ctx, s, ch, 0, 0, px, col(j)); ctx.restore();
+          });
+          return;
+        }
+        if (st === "gradient") {  // gradient is in block coordinates
+          ctx.save(); ctx.globalAlpha *= alpha; textFX(ctx, s, it.text, it.x, it.y + dy, px, fill, o); ctx.restore(); return;
+        }
+        ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(it.x, it.y + dy); if (rot) ctx.rotate(rot); if (sc !== 1) ctx.scale(sc, sc);
+        textFX(ctx, s, it.text, 0, 0, px, fill, o); ctx.restore();
+        ctx.filter = "none";
+      });
+      if (st === "typewriter") {  // blinking cursor after the last word typed
+        const it = items[ai], on = (t - g[ai].start) < 0.25 || Math.floor(t * 2.6) % 2 === 0;
+        if (on) { ctx.save(); ctx.fillStyle = s.highlight; rrect(ctx, it.left + it.width + px * 0.1, it.y - px * 0.42, px * 0.09, px * 0.84, px * 0.03); ctx.fill(); ctx.restore(); }
+      }
+    }
+  }
+  ctx.restore();
+  if (box) drawEmoji(ctx, s, g, t, (box.x0 + box.x1) / 2, box.y0, box.y1, px, vh);
+  return box;
+}
+
+class Captioner {
+  constructor(layer) { this.layer = layer; this.canvas = el("canvas"); layer.append(this.canvas); this.groups = []; this.bbox = null; }
+  set(words, s, vw, vh) { this.words = words; this.s = s; this.vw = vw || 1080; this.vh = vh || 1920; this.groups = groupWords(words, s.words, s.smart, INFO.gap); }
+  render(t) {
+    if (!this.s) return;
+    const c = this.canvas, W = this.layer.clientWidth, H = this.layer.clientHeight;
+    if (!W || !H) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(W * dpr), ch = Math.round(H * dpr);
+    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+    const ctx = c.getContext("2d"), k = Math.min(cw / this.vw, ch / this.vh);
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, ch);
+    ctx.setTransform(k, 0, 0, k, (cw - this.vw * k) / 2, (ch - this.vh * k) / 2);
+    this.bbox = drawFrame(ctx, this.vw, this.vh, this.groups, t, this.s);
+  }
+}
+
+/* ===================== state ===================== */
+const DEFAULTS = {
+  words: 3, smart: true, style: "karaoke", text_size: "medium", color: "#FFFFFF", highlight: "#FFE600", upper: true, font: null,
+  position: "middle", x: 0.5, y: 0.5, line: 1, maxw: 0.9,
+  outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off", bg_color: "#000000", bg_alpha: 0.35,
+  emoji: true, emoji_size: "m", scale: 1,
+};
+const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
+const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
+const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true };
+let S = { ...DEFAULTS }, APP = { ...APP_DEFAULTS };
+let words = [], history = [], job = null, view = "home", tool = "style", videoDims = { w: 1080, h: 1920 };
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const video = $("#video");
+let main = null, hero = null;
+const minis = [];
+
+const PRESETS = [
+  { name: "Classic", sub: "Karaoke · yellow", s: { style: "karaoke", words: 3 } },
+  { name: "CapCut box", sub: "Box · purple", s: { style: "box", words: 3 } },
+  { name: "Kinetic", sub: "Stack · poster", s: { style: "stack", words: 4 } },
+  { name: "Neon", sub: "Glowing sign", s: { style: "neon", words: 3 } },
+  { name: "Cartoon", sub: "Pop · pink", s: { style: "pop", words: 2, text_size: "large" } },
+  { name: "Slam", sub: "One giant word", s: { style: "slam", words: 2, text_size: "large" } },
+  { name: "Sunset", sub: "Gradient · rise", s: { style: "gradient", words: 3, text_size: "large" } },
+  { name: "Comic wave", sub: "Two-tone float", s: { style: "wave", words: 3, text_size: "large" } },
+  { name: "Glitch", sub: "RGB split", s: { style: "glitch", words: 2, text_size: "large" } },
+  { name: "Clean", sub: "Subtitles · bar", s: { style: "fade", words: 6, text_size: "small", position: "bottom" } },
+];
+const presetS = (p) => ({ ...lookFor(p.s.style), text_size: "medium", position: "middle", scale: 1, ...p.s });
+
+/* ===================== helpers ===================== */
+function fmt(t) { if (!isFinite(t)) t = 0; const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s < 10 ? "0" : ""}${s.toFixed(1)}`; }
+let toastTimer;
+function toast(msg, err) {
+  let t = $("#toast"); if (!t) { t = el("div", "toast"); t.id = "toast"; $("#device").append(t); }
+  t.textContent = msg; t.className = "toast" + (err ? " err" : ""); t.hidden = false; t.style.animation = "none"; void t.offsetWidth; t.style.animation = "";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), err ? 6000 : 2400);
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const pressed = (b, on) => b && b.setAttribute("aria-pressed", on ? "true" : "false");
+function ago(ts) {
+  const d = (Date.now() / 1000 - ts) | 0;
+  if (d < 60) return "Just now"; if (d < 3600) return Math.floor(d / 60) + " min ago"; if (d < 86400) return Math.floor(d / 3600) + " h ago";
+  return new Date(ts * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+const mb = (n) => (n / 1e6).toFixed(1) + " MB";
+const validFont = (k) => (FONT[k] ? k : INFO.default_font);
+const niceName = (n) => n.replace(/\.mp4$/i, "");
+const fillRange = (r) => r.style.setProperty("--p", ((r.value - r.min) / (r.max - r.min)) * 100 + "%");
+const fontStack = (key) => `"${(FONT[key] && FONT[key].css) || key}", Impact, "Arial Black", sans-serif`;
+
+/* ===================== navigation ===================== */
+function go(name) {
+  view = name;
+  const map = { home: "vHome", library: "vLibrary", settings: "vSettings", editor: "vEditor", result: "vResult" };
+  Object.entries(map).forEach(([k, id]) => {
+    const v = $("#" + id), show = k === name;
+    if (show && v.hidden) { v.classList.remove("enter"); void v.offsetWidth; v.classList.add("enter"); }
+    v.hidden = !show;
+  });
+  $("#tabbar").hidden = !["home", "library"].includes(name);
+  $$("#tabbar .tb").forEach((b) => (b.dataset.go === name ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current")));
+  if (name === "home" || name === "library") loadRecent();
+  if (name !== "editor") video.pause();
+  closeSheet();
+}
+document.addEventListener("click", (e) => { const g = e.target.closest("[data-go]"); if (g) go(g.dataset.go); });
+
+/* ===================== boot ===================== */
+const CAPTION_FONTS = [
+  { key: "poppins", label: "Poppins Black", css: "Poppins", w: 900, vibe: "Clean and modern", ratio: 0.82 },
+  { key: "montserrat", label: "Montserrat", css: "Montserrat", w: 800, vibe: "Neat and simple", ratio: 0.85 },
+  { key: "anton", label: "Anton", css: "Anton", w: 400, vibe: "Tall and loud", ratio: 0.8 },
+  { key: "bebas", label: "Bebas Neue", css: "Bebas Neue", w: 400, vibe: "Tall, always capitals", ratio: 0.95 },
+  { key: "archivo", label: "Archivo Black", css: "Archivo Black", w: 400, vibe: "Wide and chunky", ratio: 0.8 },
+  { key: "luckiest", label: "Luckiest Guy", css: "Luckiest Guy", w: 400, vibe: "Fun cartoon", ratio: 0.82 },
+  { key: "bangers", label: "Bangers", css: "Bangers", w: 400, vibe: "Comic book", ratio: 0.95 },
+  { key: "marker", label: "Permanent Marker", css: "Permanent Marker", w: 400, vibe: "Handwritten marker", ratio: 0.8 },
+  { key: "bungee", label: "Bungee", css: "Bungee", w: 400, vibe: "Street sign", ratio: 0.78 },
+  { key: "shrikhand", label: "Shrikhand", css: "Shrikhand", w: 400, vibe: "Retro italic", ratio: 0.8 },
+];
+const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
+async function boot() {
+  INFO = {
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.0 (phone)",
+    colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
+  };
+  INFO.fonts.forEach((f) => (FONT[f.key] = f));
+  Promise.all(INFO.fonts.map((f) => document.fonts.load(`${f.w} 40px "${f.css}"`).catch(() => {}))).then(() => fontsVersion++);
+  APP = { ...APP_DEFAULTS, ...(store.get("loudcaps.app") || {}) };
+  const saved = APP.remember ? store.get("loudcaps.settings") : null;
+  S = { ...DEFAULTS, ...(saved || {}) };
+  if (saved && saved.y == null && saved.position) S.y = POS_Y[saved.position] ?? 0.5;
+  if (!ALL_STYLES[S.style]) S.style = "karaoke";
+  S.font = validFont(S.font);
+
+  const warn = [];
+  if (!window.MediaRecorder || !window.Worker || !(window.AudioContext || window.webkitAudioContext) || !HTMLCanvasElement.prototype.captureStream)
+    warn.push("This browser can't make videos. Open Cool Caps in Chrome.");
+  if (warn.length) { $("#warn").innerHTML = warn.join("<br><br>"); $("#warn").hidden = false; }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
+
+  buildHome(); buildEditorControls(); buildSettings(); setupInstall();
+  refreshAll(true);
+  go("home");
+  requestAnimationFrame(frame);
+}
+function persist() { if (APP.remember) store.set("loudcaps.settings", S); }
+
+function refreshAll(regroup) {
+  if (main && words.length) { main.set(words, S, videoDims.w, videoDims.h); if (regroup) buildTranscript(); }
+  minis.forEach((m) => m.cap.set(m.words, m.settings(), m.vw, m.vh));
+  if (hero) hero.cap.set(hero.words, heroSettings(), 1080, 1350);
+}
+function setS(patch) {
+  const regroup = "words" in patch || "smart" in patch || "emoji" in patch;
+  Object.assign(S, patch); persist(); syncControls(); refreshAll(regroup);
+}
+
+/* ===================== home ===================== */
+const DEMO = [["So", 0, 0.42], ["good,", 0.42, 0.84], ["right?", 0.84, 1.6]].map(([word, start, end]) => ({ word, start, end }));
+const DEMO_K = [["Make", 0, 0.36], ["it", 0.36, 0.6], ["move", 0.6, 1.1], ["now", 1.1, 2.1]].map(([word, start, end]) => ({ word, start, end }));
+const heroSettings = () => ({ ...S, ...lookFor(hero.styles[hero.k]), style: hero.styles[hero.k], size: 150, x: 0.5, y: 0.5, words: 2, smart: false, emoji: true, emoji_size: "m", maxw: 0.9, line: 1, bg_alpha: 0.2 });
+function buildHome() {
+  hero = { cap: new Captioner($("#heroCaps")), styles: ["karaoke", "box", "stack", "neon", "pop", "slam", "wave", "glitch", "gradient"], k: 0, loop: 2.35, last: 0,
+    words: [["Make", 0, 0.38], ["every", 0.38, 0.78], ["word", 0.78, 1.25], ["hit.", 1.25, 2.1]].map(([word, start, end]) => ({ word, start, end })) };
+  $("#heroCard").onclick = () => $("#pick").click();
+  $("#plusBtn").onclick = () => $("#pick").click();
+  PRESETS.forEach((p, n) => {
+    const b = el("button", "preset"), demo = el("div", "demo footage"), layer = el("div", "cap-layer"); demo.append(layer);
+    const nm = el("span", "pname", p.name); nm.append(el("small", "", p.sub));
+    if (PRO.has(p.s.style)) demo.append(el("span", "probadge", "PRO"));
+    b.append(demo, nm);
+    b.onclick = () => { if (isLocked(p.s.style)) return paywall(p.s.style); applyPreset(p); toast(`${p.name} style is on. Now pick a video.`); $("#pick").click(); };
+    $("#presets").append(b);
+    const k = !!KIN[p.s.style];
+    minis.push({ cap: new Captioner(layer), words: k ? DEMO_K : DEMO, vw: 600, vh: 700, offset: n * 0.41, loop: k ? 2.4 : 1.85, el: b,
+      settings: () => ({ ...DEFAULTS, ...presetS(p), size: k ? 54 : 62, x: 0.5, y: 0.5, words: Math.min(p.s.words, 3), smart: false, emoji: false, bg_alpha: presetS(p).bg_alpha ?? 0.35 }) });
+  });
+}
+function applyPreset(p) { const ps = presetS(p); setS({ ...ps, x: 0.5, y: POS_Y[ps.position] ?? 0.5 }); }
+
+const LIB = {
+  db: null,
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("coolcaps", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("videos", { keyPath: "id" });
+      r.onsuccess = () => res((this.db = r.result)); r.onerror = () => rej(r.error);
+    });
+  },
+  async run(mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => { const t = db.transaction("videos", mode), req = fn(t.objectStore("videos")); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); });
+  },
+  all() { return this.run("readonly", (st) => st.getAll()); },
+  put(v) { return this.run("readwrite", (st) => st.put(v)); },
+  del(id) { return this.run("readwrite", (st) => st.delete(id)); },
+  clear() { return this.run("readwrite", (st) => st.clear()); },
+};
+const niceVid = (n) => n.replace(/\.(mp4|webm)$/i, "");
+async function loadRecent() {
+  let items = [];
+  try { items = (await LIB.all()) || []; } catch { items = []; }
+  items.sort((a, b) => b.mtime - a.mtime);
+  const rec = $("#recent"); rec.textContent = "";
+  if (!items.length) { const e = el("div", "empty"); e.append(el("b", "", "Nothing here yet"), "Videos you make show up here."); rec.append(e); }
+  items.slice(0, 4).forEach((it) => {
+    const b = el("button", "ritem"), th = el("span", "thumb"); if (it.thumb) th.style.backgroundImage = `url("${it.thumb}")`;
+    const d = el("span", "rx"); d.append(el("b", "", niceVid(it.name)), el("span", "", `${ago(it.mtime)} · ${mb(it.size)}`));
+    b.append(th, d); b.insertAdjacentHTML("beforeend", ICON.chev); b.onclick = () => openPlayer(it); rec.append(b);
+  });
+  const grid = $("#libgrid"); grid.textContent = "";
+  if (!items.length) { const e = el("div", "empty"); e.style.gridColumn = "1 / -1"; e.append(el("b", "", "Your library is empty"), "Tap the yellow + to caption your first video."); grid.append(e); }
+  items.forEach((it) => { const b = el("button", "libitem"); if (it.thumb) b.style.backgroundImage = `url("${it.thumb}")`; b.append(el("span", "", niceVid(it.name))); b.onclick = () => openPlayer(it); grid.append(b); });
+  const total = items.reduce((a, it) => a + (it.size || 0), 0);
+  $("#libSize").textContent = items.length ? `${items.length} video${items.length > 1 ? "s" : ""} · ${mb(total)} on this phone` : "Videos you make are kept on this phone";
+}
+function saveToPhone(it) {
+  const a = el("a"); a.href = URL.createObjectURL(it.blob); a.download = it.name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  toast("Saved to Downloads. It's in Files and in Google Photos › Library.");
+}
+async function shareVideo(it) {
+  const file = new File([it.blob], it.name, { type: it.type || "video/mp4" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: niceVid(it.name) }); } catch (e) { if (e && e.name !== "AbortError") toast("Couldn't share. Try Save instead.", true); }
+  } else saveToPhone(it);
+}
+
+/* ===================== sheets ===================== */
+function openSheet(build) {
+  closeSheet();
+  const veil = el("div", "veil"); veil.id = "veil"; const sh = el("div", "sheet"); sh.append(el("div", "grab"));
+  build(sh); veil.append(sh);
+  veil.addEventListener("mousedown", (e) => { if (e.target === veil) closeSheet(); });
+  $("#layer").append(veil);
+  return sh;
+}
+function closeSheet() { const v = $("#veil"); if (v) { v.querySelectorAll("video").forEach((x) => x.pause()); v.remove(); } }
+
+function paywall(style) {
+  openSheet((sh) => {
+    sh.classList.add("pw");
+    sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Unlock every style"));
+    sh.append(el("p", "sub", style ? `"${style[0].toUpperCase() + style.slice(1)}" is a Pro animation.` : "Get the full creative toolkit."));
+    const ul = el("ul", "pwlist");
+    ["All 12 Trendy and Kinetic animations", "No watermark on exports", "Every effect, emoji and font", "New styles as they're added"].forEach((x) => ul.append(el("li", "", x)));
+    const buy = el("button", "btn primary block", "Coming soon"); buy.disabled = true;
+    const later = el("button", "btn ghost block", "Keep using Free styles"); later.onclick = closeSheet;
+    sh.append(ul, buy, later);
+  });
+}
+function openPlayer(it) {
+  openSheet((sh) => {
+    const url = URL.createObjectURL(it.blob);
+    const fr = el("div", "player"), v = el("video"); v.src = url; v.controls = true; v.autoplay = true; v.loop = true; v.playsInline = true; fr.append(v);
+    sh.append(fr, el("h3", "", niceVid(it.name)), el("p", "sub", `${ago(it.mtime)} · ${mb(it.size)}`));
+    const row = el("div", "btnrow");
+    const save = el("button", "btn primary", "Save to phone"); save.onclick = () => saveToPhone(it);
+    const share = el("button", "btn ghost", "Share"); share.onclick = () => shareVideo(it);
+    row.append(save, share);
+    const del = el("button", "btn danger block", "Delete video");
+    del.onclick = async () => {
+      if (!del.dataset.sure) { del.dataset.sure = "1"; del.textContent = "Tap again to delete it for good"; return; }
+      try { await LIB.del(it.id); closeSheet(); toast("Deleted"); loadRecent(); } catch (e) { toast("Couldn't delete it.", true); }
+    };
+    sh.append(row, del);
+  });
+}
+
+/* ===================== settings ===================== */
+const LANGS = [["", "Auto-detect"], ["en", "English"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["it", "Italian"], ["pt", "Portuguese"], ["nl", "Dutch"], ["ar", "Arabic"], ["hi", "Hindi"], ["tl", "Tagalog"], ["id", "Indonesian"], ["vi", "Vietnamese"], ["tr", "Turkish"], ["ru", "Russian"], ["ja", "Japanese"], ["ko", "Korean"], ["zh", "Chinese"]];
+const ACC_NOTE = { base: "Fastest, smallest download. Good for clear speech.", small: "Right for most videos.", medium: "Most accurate, but slower and a much bigger download." };
+const Q_NOTE = { standard: "Smaller files, quick to upload.", high: "Looks great, sensible file size.", max: "Best quality, bigger files." };
+function buildSettings() {
+  const sel = $("#langSel"); LANGS.forEach(([v, l]) => { const o = el("option", "", l); o.value = v; sel.append(o); });
+  sel.onchange = () => { APP.lang = sel.value; saveApp(); };
+  $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
+  $$("#qSeg button").forEach((b) => (b.onclick = () => { APP.quality = b.dataset.v; saveApp(); }));
+  $("#rememberSw").onclick = () => { APP.remember = !APP.remember; saveApp(); if (APP.remember) persist(); };
+  $("#resetStyle").onclick = () => { setS({ ...DEFAULTS, ...lookFor("karaoke") }); toast("Caption style reset"); };
+  $("#clearLib").onclick = async (e) => {
+    const b = e.currentTarget;
+    if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Sure?"; return; }
+    await LIB.clear().catch(() => {}); b.dataset.sure = ""; b.textContent = "Clear"; toast("Library cleared"); loadRecent();
+  };
+  $("#stWhisper").innerHTML = '<span class="ok">Whisper runs on this phone</span>';
+  $("#stFfmpeg").innerHTML = '<span class="ok">Built into Chrome</span>';
+  $("#stFonts").textContent = `${INFO.fonts.length} fonts`;
+  $("#stVer").textContent = "Version " + (INFO.version || "1");
+  $("#planNote").textContent = LOCK_PRO ? "Free plan. Tap to see what Pro unlocks." : "Beta: all Pro styles are unlocked for now";
+  $("#planRow").onclick = () => paywall(null);
+  syncSettings();
+}
+function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
+function syncSettings() {
+  $$("#accSeg button").forEach((b) => pressed(b, b.dataset.v === APP.model));
+  $$("#qSeg button").forEach((b) => pressed(b, b.dataset.v === APP.quality));
+  $("#accNote").textContent = ACC_NOTE[APP.model] || ""; $("#qNote").textContent = Q_NOTE[APP.quality] || "";
+  $("#langSel").value = APP.lang; $("#rememberSw").setAttribute("aria-checked", APP.remember);
+}
+
+/* ===================== editor controls ===================== */
+const TOOLS = [["style", "Animation"], ["font", "Font"], ["look", "Look"], ["fx", "Effects"], ["words", "Words"], ["text", "Transcript"]];
+const WPS_HINT = { 1: "One word at a time. Maximum punch.", 2: "Fast and punchy, the TikTok pace.", 3: "Balanced. The most popular choice.", 4: "Relaxed and easy to follow.", 5: "Calm, good for long talking." };
+function swatches(root, prop) {
+  Object.entries(INFO.colors).forEach(([name, hex]) => { const b = el("button", "sw"); b.style.background = hex; b.dataset.hex = hex.toUpperCase(); b.setAttribute("aria-label", name); b.title = name; b.onclick = () => setS({ [prop]: hex.toUpperCase() }); root.append(b); });
+  const c = el("label", "sw custom"); c.title = "Any colour"; const inp = el("input"); inp.type = "color"; inp.setAttribute("aria-label", "Any colour"); inp.oninput = () => setS({ [prop]: inp.value.toUpperCase() }); c.append(inp); root.append(c);
+}
+function optTiles(root, prop, list) {
+  list.forEach(([v, label, styleVis]) => {
+    const b = el("button", "opt"); b.dataset.v = v;
+    const vis = el("span", "vis"); if (typeof styleVis === "function") styleVis(vis); else vis.textContent = "Aa";
+    b.append(vis, el("span", "", label)); b.onclick = () => setS({ [prop]: v }); root.append(b);
+  });
+}
+let rangeSyncs = [];
+function bindRange(id, toVal, fromS, label) {
+  const r = $("#" + id);
+  r.oninput = () => { fillRange(r); setS(toVal(+r.value)); };
+  return () => { if (document.activeElement !== r) r.value = fromS(); fillRange(r); if (label) label(); };
+}
+function buildEditorControls() {
+  TOOLS.forEach(([k, label]) => { const b = el("button"); b.setAttribute("role", "tab"); b.dataset.tool = k; b.innerHTML = ICON[k]; b.append(label); b.onclick = () => setTool(k); $("#toolbar").append(b); });
+  STYLE_GROUPS.forEach(([title, tag, styles], gnum) => {
+    const head = el("div", "sec-label"); head.append(el("span", "label", title));
+    head.append(el("span", "tag " + (gnum === 0 ? "f" : "pro"), gnum === 0 ? "Free" : "Pro"));
+    if (tag) head.append(el("span", "tag " + tag, tag === "y" ? "Trending" : "Wild"));
+    const grid = el("div", "sgrid"); grid.style.margin = "8px 0 14px";
+    Object.entries(styles).forEach(([key, desc], n) => {
+      const k = !!KIN[key];
+      const b = el("button", "scard"); b.dataset.style = key; b.title = desc;
+      const demo = el("div", "demo footage"), layer = el("div", "cap-layer"); demo.append(layer);
+      if (PRO.has(key)) demo.append(el("span", "probadge", "PRO"));
+      b.append(demo, el("b", "", key));
+      b.onclick = () => { if (isLocked(key)) return paywall(key); setS({ style: key, ...lookFor(key) }); };
+      grid.append(b);
+      minis.push({ cap: new Captioner(layer), words: k ? DEMO_K : DEMO, vw: 600, vh: 430, offset: (gnum * 6 + n) * 0.37, loop: k ? 2.4 : 1.85, el: b,
+        settings: () => ({ ...S, ...lookFor(key), style: key, size: k ? 44 : 56, x: 0.5, y: 0.5, words: 3, smart: false, emoji: false, maxw: 0.92, line: 1 }) });
+    });
+    $("#styleSections").append(head, grid);
+  });
+  INFO.fonts.forEach((f) => {
+    const b = el("button", "ftile"); b.dataset.font = f.key; const aa = el("span", "aa", "Aa"); aa.style.fontFamily = fontStack(f.key);
+    const lab = el("small", "", f.label); lab.append(el("i", "", f.vibe));
+    aa.style.fontWeight = f.w; b.append(aa, lab); b.title = f.vibe; b.onclick = () => setS({ font: f.key }); $("#fontRow").append(b);
+  });
+  const sz = { small: 16, medium: 22, large: 28, xl: 34 };
+  optTiles($("#sizeSeg"), "text_size", [["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["xl", "XL"]].map(([v, l]) => [v, l, (vis) => { vis.textContent = "Aa"; vis.style.fontSize = sz[v] + "px"; }]));
+  $$("#sizeSeg .opt").forEach((b) => (b.onclick = () => setS({ text_size: b.dataset.v, scale: 1 })));
+  [["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]].forEach(([k, l]) => {
+    const b = el("button", "opt"); b.dataset.v = k; const f = el("span", "mini-frame"), bar = el("i");
+    if (k === "top") bar.style.top = "5px"; else if (k === "middle") bar.style.top = "calc(50% - 2.5px)"; else bar.style.bottom = "5px";
+    f.append(bar); b.append(f, el("span", "", l)); b.onclick = () => setS({ position: k, x: 0.5, y: POS_Y[k] }); $("#posSeg").append(b);
+  });
+  swatches($("#colorSw"), "color"); swatches($("#hlSw"), "highlight");
+  rangeSyncs = [
+    bindRange("scR", (v) => ({ scale: v / 100 }), () => Math.round((S.scale || 1) * 100), () => ($("#scVal").textContent = Math.round((S.scale || 1) * 100) + "%")),
+    bindRange("xR", (v) => ({ x: v / 100 }), () => Math.round(S.x * 100), () => ($("#xVal").textContent = Math.round(S.x * 100) + "%")),
+    bindRange("yR", (v) => ({ y: v / 100 }), () => Math.round(S.y * 100), () => ($("#yVal").textContent = Math.round(S.y * 100) + "%")),
+    bindRange("lineR", (v) => ({ line: v / 100 }), () => Math.round(S.line * 100), () => ($("#lineVal").textContent = S.line.toFixed(2) + "×")),
+    bindRange("wR", (v) => ({ maxw: v / 100 }), () => Math.round(S.maxw * 100), () => ($("#wVal").textContent = Math.round(S.maxw * 100) + "%")),
+    bindRange("baR", (v) => ({ bg_alpha: v / 100 }), () => Math.round(S.bg_alpha * 100), () => ($("#baVal").textContent = Math.round(S.bg_alpha * 100) + "%")),
+  ];
+  $("#capsSw").onclick = () => setS({ upper: !S.upper });
+  const ol = { none: 0, thin: 1, medium: 2, thick: 3.5 };
+  optTiles($("#olSeg"), "outline", [["none", "None"], ["thin", "Thin"], ["medium", "Medium"], ["thick", "Thick"]].map(([v, l]) => [v, l, (vis) => { vis.textContent = "Aa"; if (ol[v]) vis.style.webkitTextStroke = `${ol[v] * 2}px #000`; vis.style.paintOrder = "stroke fill"; }]));
+  swatches($("#olSw"), "outline_color");
+  optTiles($("#shSeg"), "shadow", [["off", "No shadow", null], ["soft", "Soft", (v) => { v.textContent = "Aa"; v.style.textShadow = "3px 4px 8px rgba(0,0,0,.95)"; }], ["hard", "Hard", (v) => { v.textContent = "Aa"; v.style.textShadow = "4px 4px 0 #000"; }]]);
+  $("#glowSw").onclick = () => setS({ glow: !S.glow });
+  optTiles($("#bgSeg"), "bg", [["off", "None", null], ["box", "Box", (v) => { v.textContent = "Aa"; v.style.cssText = "background:#000;padding:2px 9px;border-radius:7px;border:1px solid rgba(255,255,255,.2)"; }], ["bar", "Bars", (v) => { v.innerHTML = '<span style="display:flex;flex-direction:column;gap:2px;align-items:center;font-size:13px;line-height:1"><span style="background:#000;padding:1px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.2)">Aa Aa</span><span style="background:#000;padding:1px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.2)">Aa</span></span>'; }]]);
+  swatches($("#bgSw"), "bg_color");
+  $("#emojiSw").onclick = () => setS({ emoji: !S.emoji });
+  $$("#esSeg button").forEach((b) => (b.onclick = () => setS({ emoji_size: b.dataset.v })));
+  for (let n = 1; n <= 6; n++) { const b = el("button", "", String(n)); b.dataset.n = n; b.onclick = () => setS({ words: n }); $("#wpsChips").append(b); }
+  $("#smartSw").onclick = () => setS({ smart: !S.smart });
+  $("#wpsMinus").onclick = () => setS({ words: Math.max(1, S.words - 1) });
+  $("#wpsPlus").onclick = () => setS({ words: Math.min(10, S.words + 1) });
+  setTool("style"); syncControls();
+}
+function setTool(k) {
+  tool = k;
+  $$("#toolbar button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tool === k));
+  $$(".tpane").forEach((p) => (p.hidden = p.dataset.pane !== k));
+  $("#toolPanel").scrollTop = 0;
+}
+function syncControls() {
+  $$(".scard").forEach((b) => pressed(b, b.dataset.style === S.style));
+  $$(".ftile").forEach((b) => pressed(b, b.dataset.font === S.font));
+  $$("#sizeSeg .opt").forEach((b) => pressed(b, b.dataset.v === S.text_size));
+  $$("#posSeg .opt").forEach((b) => pressed(b, Math.abs(S.x - 0.5) < 0.005 && Math.abs(S.y - POS_Y[b.dataset.v]) < 0.005));
+  $$("#olSeg .opt").forEach((b) => pressed(b, b.dataset.v === S.outline));
+  $$("#shSeg .opt").forEach((b) => pressed(b, b.dataset.v === S.shadow));
+  $$("#bgSeg .opt").forEach((b) => pressed(b, b.dataset.v === S.bg));
+  $("#bgMore").hidden = S.bg === "off";
+  const isPreset = (c) => Object.values(INFO.colors).some((h) => h.toUpperCase() === String(c).toUpperCase());
+  [["#colorSw", "color"], ["#hlSw", "highlight"], ["#olSw", "outline_color"], ["#bgSw", "bg_color"]].forEach(([id, prop]) => {
+    $$(id + " .sw[data-hex]").forEach((b) => pressed(b, b.dataset.hex === String(S[prop]).toUpperCase())); pressed($(id + " .custom"), !isPreset(S[prop]));
+  });
+  const hl = !NO_HL.has(S.style);
+  $("#hlSw").style.opacity = hl ? "" : ".35"; $("#hlLabel").textContent = hl ? "Highlight (the word being said)" : "Highlight (not used by this animation)";
+  $("#capsSw").setAttribute("aria-checked", S.upper); $("#smartSw").setAttribute("aria-checked", S.smart);
+  $("#glowSw").setAttribute("aria-checked", S.glow); $("#emojiSw").setAttribute("aria-checked", S.emoji);
+  $$("#esSeg button").forEach((b) => pressed(b, b.dataset.v === S.emoji_size));
+  $("#wpsNum").textContent = S.words; $("#wpsHint").textContent = WPS_HINT[Math.min(S.words, 5)];
+  $$("#wpsChips button").forEach((b) => pressed(b, +b.dataset.n === S.words));
+  rangeSyncs.forEach((f) => f());
+  $$(".preset").forEach((b, n) => { const p = presetS(PRESETS[n]); pressed(b, p.style === S.style && p.words === S.words && p.font === S.font && p.color === String(S.color).toUpperCase()); });
+}
+
+/* ===================== files ===================== */
+$("#pick").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) startFile(f); };
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => { if ([...e.dataTransfer.types].includes("Files")) { dragDepth++; document.body.classList.add("dragging"); } });
+window.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove("dragging"); });
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  const f = [...(e.dataTransfer.files || [])].find((x) => x.type.startsWith("video/") || /\.(mp4|mov|m4v|webm|mkv|avi)$/i.test(x.name));
+  if (f) startFile(f); else toast("That's not a video file. Try an MP4 or MOV.", true);
+});
+
+function setWorking(on, { pct = null, stage = "", note = "", error = false } = {}) {
+  $("#working").hidden = !on; $("#tools").classList.toggle("locked", on); $("#exportBtn").disabled = on;
+  if (!on) return;
+  $("#wNum").textContent = error ? "Oops" : pct == null ? "" : Math.round(pct * 100) + "%";
+  $("#wNum").hidden = pct == null && !error;
+  $("#wStage").textContent = stage; $("#wNote").textContent = note; $("#wNote").classList.toggle("err", error);
+  $("#wBarWrap").hidden = error; $("#wBarWrap").classList.toggle("ind", pct == null); $("#wBar").style.width = pct == null ? "" : Math.round(pct * 100) + "%";
+  $("#wBack").hidden = !error;
+}
+
+
+const WORKER_SRC = `
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
+env.allowLocalModels = false;
+let asr = null, current = "";
+async function load(model, device) {
+  const opts = device === "webgpu"
+    ? { device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" } }
+    : { device: "wasm", dtype: "q8" };
+  return pipeline("automatic-speech-recognition", model, { ...opts, progress_callback: (p) => postMessage({ type: "progress", p }) });
+}
+self.onmessage = async (e) => {
+  const { audio, model, language } = e.data;
+  try {
+    if (!asr || current !== model) {
+      postMessage({ type: "loading" });
+      let dev = self.navigator && self.navigator.gpu ? "webgpu" : "wasm";
+      try { asr = await load(model, dev); }
+      catch (err) { if (dev !== "webgpu") throw err; dev = "wasm"; asr = await load(model, dev); }
+      current = model;
+    }
+    postMessage({ type: "stage" });
+    const opts = { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5 };
+    if (language) { opts.language = language; opts.task = "transcribe"; }
+    const out = await asr(audio, opts);
+    const words = [];
+    for (const c of out.chunks || []) {
+      const w = String(c.text || "").trim(); if (!w) continue;
+      let [s0, s1] = c.timestamp || [0, 0];
+      if (s0 == null) s0 = words.length ? words[words.length - 1].end : 0;
+      if (s1 == null || s1 <= s0) s1 = s0 + 0.3;
+      words.push({ word: w, start: s0, end: s1 });
+    }
+    postMessage({ type: "done", words });
+  } catch (err) { postMessage({ type: "error", message: String((err && err.message) || err) }); }
+};`;
+const MODELS = { base: "onnx-community/whisper-tiny_timestamped", small: "onnx-community/whisper-base_timestamped", medium: "onnx-community/whisper-small_timestamped" };
+let asrWorker = null;
+function getWorker() {
+  if (!asrWorker) asrWorker = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: "text/javascript" })), { type: "module" });
+  return asrWorker;
+}
+async function decodeAudio(file) {
+  const buf = await file.arrayBuffer();
+  const ctx = new OfflineAudioContext(1, 16000, 16000);
+  const ab = await ctx.decodeAudioData(buf);  // decoded and resampled to 16 kHz, what Whisper wants
+  if (ab.numberOfChannels === 1) return ab.getChannelData(0).slice();
+  const a = ab.getChannelData(0), b = ab.getChannelData(1), out = new Float32Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = (a[i] + b[i]) / 2;
+  return out;
+}
+function transcribe(audio, onStatus) {
+  if (FAKE) return fetch("words.json").then((r) => r.json());
+  return new Promise((resolve, reject) => {
+    const w = getWorker(), files = {}, t0 = performance.now(); let timer = null;
+    const finish = () => { clearInterval(timer); w.onmessage = null; w.onerror = null; };
+    w.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "progress") {
+        const p = m.p || {};
+        if (p.status === "progress" && p.total) {
+          files[p.file] = [p.loaded || 0, p.total];
+          const vals = Object.values(files), L = vals.reduce((a, v) => a + v[0], 0), T = vals.reduce((a, v) => a + v[1], 0);
+          onStatus({ pct: T ? L / T : null, stage: "Downloading the speech model", note: `First time only (${Math.round(T / 1e6)} MB). After this it starts straight away, even offline.` });
+        }
+      } else if (m.type === "loading") onStatus({ pct: null, stage: "Starting Whisper", note: "Getting the speech model ready on your phone." });
+      else if (m.type === "stage") {
+        const len = audio.length / 16000;
+        const tick = () => onStatus({ pct: null, stage: "Transcribing", note: `Whisper is listening on your phone · ${Math.round((performance.now() - t0) / 1000)}s (video is ${Math.round(len)}s)` });
+        tick(); timer = setInterval(tick, 1000);
+      } else if (m.type === "done") { finish(); resolve(m.words); }
+      else if (m.type === "error") { finish(); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
+    };
+    w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
+    w.postMessage({ audio, model: MODELS[APP.model] || MODELS.small, language: APP.lang || null }, [audio.buffer]);
+  });
+}
+let objectURL = null, token = 0, wakeLock = null;
+async function keepAwake(on) {
+  try { if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; } } catch { wakeLock = null; }
+}
+async function startFile(file) {
+  const my = ++token;
+  words = []; history = []; job = null; lastWord = lastRow = -1;
+  $("#transcript").textContent = "";
+  if (objectURL) URL.revokeObjectURL(objectURL);
+  objectURL = URL.createObjectURL(file); video.src = objectURL; currentFile = file;
+  $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
+  if (!main) main = new Captioner($("#caps"));
+  main.set([], S, 1080, 1920);
+  go("editor"); setTool("style");
+  setWorking(true, { pct: null, stage: "Reading the audio", note: "Your video stays on your phone. Nothing is uploaded." });
+  keepAwake(true);
+  await new Promise((r) => { if (video.readyState >= 1) r(); else { video.addEventListener("loadedmetadata", r, { once: true }); setTimeout(r, 5000); } });
+  let audio;
+  try { audio = await decodeAudio(file); }
+  catch (e) { if (my === token) setWorking(true, { stage: "Couldn't find any sound", note: "Cool Caps couldn't read audio from this video. Try another one.", error: true }); keepAwake(false); return; }
+  if (my !== token) return;
+  const meta = { id: Date.now().toString(36), name: file.name, duration: video.duration || audio.length / 16000, width: video.videoWidth || 1080, height: video.videoHeight || 1920 };
+  let ws;
+  try { ws = await transcribe(audio, (st) => { if (my === token) setWorking(true, st); }); }
+  catch (e) { if (my === token) setWorking(true, { stage: "Couldn't transcribe", note: e.message, error: true }); keepAwake(false); return; }
+  keepAwake(false);
+  if (my !== token) return;
+  ws = (ws || []).filter((w) => String(w.word).trim());
+  if (!ws.length) return setWorking(true, { stage: "No words found", note: "Whisper couldn't hear any speech in this video.", error: true });
+  onTranscribed({ ...meta, words: ws });
+}
+let currentFile = null;
+function onTranscribed(j) {
+  job = j; words = j.words.map((w) => ({ ...w }));
+  videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
+  $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
+  setWorking(false); refreshAll(true); toast(`${words.length} words transcribed`);
+  if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
+}
+$("#wBack").onclick = () => { token++; go("home"); };
+$("#edBack").onclick = () => { token++; go("home"); };
+$("#guideOk").onclick = () => { $("#guide").hidden = true; store.set("loudcaps.guided", true); };
+
+/* ===================== playback + dragging captions ===================== */
+let lastWord = -1, lastRow = -1, playUntil = null;
+function togglePlay() { if (!video.src || !$("#working").hidden) return; playUntil = null; video.paused ? video.play().catch(() => {}) : video.pause(); }
+$("#playIcon").innerHTML = ICON.play;
+$("#playBtn").onclick = togglePlay;
+video.addEventListener("play", () => ($("#playIcon").innerHTML = ICON.pause));
+video.addEventListener("pause", () => ($("#playIcon").innerHTML = ICON.play));
+video.addEventListener("loadedmetadata", () => { $("#scrub").max = video.duration || 1; if (!job) videoDims = { w: video.videoWidth || 1080, h: video.videoHeight || 1920 }; });
+video.addEventListener("error", () => { if (video.src && view === "editor") toast("This video can't play in the preview, but exporting still works.", true); });
+$("#scrub").addEventListener("input", (e) => (video.currentTime = +e.target.value));
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, select, textarea") || view !== "editor" || $("#veil")) return;
+  if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+  else if (e.code === "ArrowLeft") video.currentTime = Math.max(0, video.currentTime - 1);
+  else if (e.code === "ArrowRight") video.currentTime = Math.min(video.duration || 0, video.currentTime + 1);
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+});
+function fitLayer() {
+  const st = $("#stage"), layer = $("#caps"), W = st.clientWidth, H = st.clientHeight;
+  const vw = video.videoWidth || videoDims.w, vh = video.videoHeight || videoDims.h, k = Math.min(W / vw, H / vh), w = vw * k, h = vh * k;
+  const key = [W, H, vw, vh].join("|"); if (layer._key === key) return; layer._key = key;
+  Object.assign(layer.style, { left: (W - w) / 2 + "px", top: (H - h) / 2 + "px", width: w + "px", height: h + "px" });
+}
+const stageEl = $("#stage");
+let drag = null, tap = null;
+function toVideo(e) { const r = $("#caps").getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * videoDims.w, y: (e.clientY - r.top) / r.height * videoDims.h }; }
+function overCaption(p) { const b = main && main.bbox; if (!b) return false; const m = videoDims.w * 0.04; return p.x > b.x0 - m && p.x < b.x1 + m && p.y > b.y0 - m && p.y < b.y1 + m; }
+stageEl.addEventListener("pointerdown", (e) => {
+  if (!words.length || !$("#working").hidden || e.target.closest(".pv-play")) return;
+  const p = toVideo(e);
+  if (overCaption(p)) {
+    drag = { dx: S.x * videoDims.w - p.x, dy: S.y * videoDims.h - p.y, moved: false };
+    stageEl.setPointerCapture(e.pointerId); stageEl.classList.add("dragging"); e.preventDefault();
+  } else tap = { x: e.clientX, y: e.clientY };
+});
+stageEl.addEventListener("pointermove", (e) => {
+  if (!words.length) return;
+  const p = toVideo(e);
+  if (!drag) { stageEl.classList.toggle("can-drag", overCaption(p)); return; }
+  let nx = clamp((p.x + drag.dx) / videoDims.w, 0.02, 0.98), ny = clamp((p.y + drag.dy) / videoDims.h, 0.02, 0.98);
+  const snapX = Math.abs(nx - 0.5) < 0.025, snapY = Math.abs(ny - 0.5) < 0.02;
+  if (snapX) nx = 0.5; if (snapY) ny = 0.5;
+  const r = $("#caps"); $("#gV").hidden = !snapX; $("#gH").hidden = !snapY;
+  $("#gV").style.left = r.offsetLeft + r.offsetWidth / 2 + "px"; $("#gH").style.top = r.offsetTop + r.offsetHeight / 2 + "px";
+  S.x = nx; S.y = ny; drag.moved = true;
+});
+stageEl.addEventListener("pointerup", (e) => {
+  if (drag) {
+    stageEl.classList.remove("dragging"); $("#gV").hidden = $("#gH").hidden = true;
+    if (drag.moved) { persist(); syncControls(); store.set("loudcaps.dragged", true); } else togglePlay();
+    drag = null; return;
+  }
+  if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 8) togglePlay();
+  tap = null;
+});
+stageEl.addEventListener("pointercancel", () => { drag = null; tap = null; stageEl.classList.remove("dragging"); $("#gV").hidden = $("#gH").hidden = true; });
+
+/* ===================== transcript ===================== */
+const EMOJI_PICK = "💰 💸 🧾 🔥 ❤️ 😂 💡 ⏰ 🏆 🤯 🤫 ⚠️ ✅ ❌ ⚡ 📈 📉 🚀 💪 👀 👉 🧠 🤔 🎉 🎁 ⭐ 💎 👑 🎯 📊 🍔 ☕ 🏠 💼 📱 🎵 🎥 🎮 ✈️ 💥 😎 😱 😊 😢 😡 🙌 👏 💯".split(" ");
+function buildTranscript() {
+  const root = $("#transcript"); root.textContent = ""; lastWord = -1; lastRow = -1;
+  if (!main) return;
+  let idx = 0;
+  main.groups.forEach((g, gn) => {
+    const from = idx;
+    const row = el("div", "scr"); row.dataset.g = gn;
+    const play = el("button", "sp"); play.innerHTML = ICON.play; play.setAttribute("aria-label", "Play this screen");
+    const gs = g[0].start, ge = g[g.length - 1].end;
+    play.onclick = () => { if (!video.duration) return; video.currentTime = gs; video.play().catch(() => {}); playUntil = ge; };
+    const box = el("div", "sw2"); box.append(el("span", "st", fmt(gs)));
+    const ws = el("div", "ws");
+    g.forEach(() => { const i = idx++, w = words[i]; const b = el("button", "tw" + (w.edited ? " edited" : ""), w.word); b.dataset.i = i; b.onclick = () => editWord(i); ws.append(b); });
+    const to = idx - 1;
+    const pick = groupEmoji(g, S);
+    const em = el("button", "em" + (pick ? " has" : ""), pick ? pick.e : "+"); em.title = "Emoji for this screen"; em.setAttribute("aria-label", "Change emoji");
+    em.onclick = () => pickEmoji(from, to, g);
+    box.append(ws); row.append(play, box, em); root.append(row);
+  });
+}
+function pickEmoji(from, to, g) {
+  openSheet((sh) => {
+    sh.append(el("h3", "", "Emoji for this screen"), el("p", "sub", `"${g.map((w) => w.word).join(" ")}"`));
+    const set = (val) => {
+      snapshot();
+      for (let i = from; i <= to; i++) delete words[i].emoji;
+      if (val === "none") for (let i = from; i <= to; i++) words[i].emoji = "";
+      else if (val !== "auto") { const auto = g.findIndex((w) => autoEmoji(w.word)); words[from + Math.max(0, auto)].emoji = val; }
+      closeSheet(); refreshAll(true);
+      if (val !== "none" && val !== "auto" && !S.emoji) toast("Emoji added");
+    };
+    const row = el("div", "btnrow");
+    const a = el("button", "btn ghost small", "Automatic"); a.onclick = () => set("auto");
+    const n = el("button", "btn ghost small", "No emoji"); n.onclick = () => set("none");
+    row.append(a, n);
+    const grid = el("div", "emgrid");
+    EMOJI_PICK.forEach((e) => { const b = el("button", "", e); b.onclick = () => set(e); grid.append(b); });
+    sh.append(row, grid);
+  });
+}
+function snapshot() { history.push(JSON.stringify(words)); if (history.length > 80) history.shift(); }
+function undo() { if (!history.length) return toast("Nothing to undo"); words = JSON.parse(history.pop()); refreshAll(true); toast("Undone"); }
+function spread(tokens, start, end) {
+  const wts = tokens.map((t) => t.length + 1), tot = wts.reduce((a, b) => a + b, 0); let t = start;
+  return tokens.map((tok, n) => { const d = (end - start) * wts[n] / tot; const w = { word: tok, start: t, end: t + d, edited: true }; t += d; return w; });
+}
+function editWord(i, adding = false) {
+  const w = words[i];
+  if (video.duration) { video.pause(); video.currentTime = w.start + Math.min(0.18, (w.end - w.start) * 0.6); }
+  openSheet((sh) => {
+    sh.append(el("h3", "", adding ? `Add a word after "${w.word}"` : "Fix this word"), el("p", "sub", `At ${fmt(w.start)}`));
+    const inp = el("input"); inp.type = "text"; inp.value = adding ? "" : w.word; inp.placeholder = adding ? "Type the missing word" : ""; inp.autocomplete = "off";
+    const del = () => { if (words.length <= 1) return toast("You need at least one word.", true); snapshot(); words.splice(i, 1); closeSheet(); refreshAll(true); toast(`Deleted "${w.word}". Ctrl+Z undoes.`); };
+    const save = () => {
+      const toks = inp.value.trim().split(/\s+/).filter(Boolean);
+      if (adding) {
+        if (!toks.length) return closeSheet();
+        snapshot(); const nx = words[i + 1], room = (nx ? nx.start : w.end + 0.4 * toks.length) - w.end;
+        if (room >= 0.15 * toks.length) words.splice(i + 1, 0, ...spread(toks, w.end, w.end + Math.min(room, 0.45 * toks.length)));
+        else words.splice(i, 1, ...spread([w.word, ...toks], w.start, Math.max(w.end, nx ? nx.start : w.end)));
+      } else {
+        if (!toks.length) return del();
+        if (toks.length === 1 && toks[0] === w.word) return closeSheet();
+        snapshot(); if (toks.length === 1) words[i] = { ...w, word: toks[0], edited: true }; else words.splice(i, 1, ...spread(toks, w.start, w.end));
+      }
+      closeSheet(); refreshAll(true);
+    };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") closeSheet(); });
+    sh.append(inp);
+    const row = el("div", "btnrow");
+    if (!adding) {
+      const d = el("button", "btn danger", "Delete"); d.onclick = del;
+      const a = el("button", "btn ghost", "Add after"); a.onclick = () => editWord(i, true);
+      row.append(d, a);
+    }
+    const s = el("button", "btn primary", adding ? "Add" : "Save"); s.onclick = save; row.append(s);
+    sh.append(row);
+    setTimeout(() => { inp.focus(); inp.select(); }, 60);
+  });
+}
+function diffOps(a, b) {
+  const n = a.length, m = b.length, L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const ops = []; let i = 0, j = 0;
+  const push = (tag, i1, i2, j1, j2) => { const l = ops[ops.length - 1]; if (l && l[0] === tag && l[2] === i1 && l[4] === j1) { l[2] = i2; l[4] = j2; } else ops.push([tag, i1, i2, j1, j2]); };
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) { push("equal", i, i + 1, j, j + 1); i++; j++; }
+    else if (j < m && (i === n || L[i][j + 1] >= L[i + 1][j])) { push("insert", i, i, j, j + 1); j++; }
+    else { push("delete", i, i + 1, j, j); i++; }
+  }
+  const out = [];
+  for (const op of ops) {
+    const l = out[out.length - 1];
+    if (l && l[0] !== "equal" && op[0] !== "equal") out[out.length - 1] = ["replace", l[1], op[2], l[3], op[4]];
+    else out.push([...op]);
+  }
+  return out.map((o) => (o[0] === "replace" && o[1] === o[2] ? ["insert", ...o.slice(1)] : o[0] === "replace" && o[3] === o[4] ? ["delete", ...o.slice(1)] : o));
+}
+function applyEdits(old, text) {  // same logic as script.py apply_edits: timings survive the edit
+  const nw = text.split(/\s+/).filter(Boolean), norm = (x) => x.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+  const ops = diffOps(old.map((w) => norm(w.word)), nw.map(norm));
+  const out = [], stats = { changed: 0, added: 0, removed: 0 }; let pending = [];
+  const emit = (items) => { if (pending.length && items.length) { const f = items[0]; items = [...spread(pending.concat([f.word]), f.start, f.end), ...items.slice(1)]; pending = []; } out.push(...items); };
+  for (const [tag, i1, i2, j1, j2] of ops) {
+    const toks = nw.slice(j1, j2);
+    if (tag === "equal") { for (let k = 0; k < i2 - i1; k++) { if (old[i1 + k].word !== toks[k]) stats.changed++; } emit(toks.map((t, k) => ({ ...old[i1 + k], word: t }))); }
+    else if (tag === "replace") { stats.changed += Math.min(i2 - i1, j2 - j1); stats.added += Math.max(0, (j2 - j1) - (i2 - i1)); stats.removed += Math.max(0, (i2 - i1) - (j2 - j1)); emit(spread(toks, old[i1].start, old[i2 - 1].end)); }
+    else if (tag === "delete") stats.removed += i2 - i1;
+    else if (tag === "insert") {
+      stats.added += toks.length;
+      if (!out.length) { pending.push(...toks); continue; }
+      const prevEnd = out[out.length - 1].end, nextStart = i1 < old.length ? old[i1].start : prevEnd + 0.35 * toks.length;
+      if (nextStart - prevEnd >= 0.15 * toks.length) emit(spread(toks, prevEnd, nextStart));
+      else { const last = out.pop(); emit(spread([last.word, ...toks], last.start, Math.max(last.end, nextStart))); }
+    }
+  }
+  if (pending.length) return { words: spread(pending, old.length ? old[0].start : 0, old.length ? old[old.length - 1].end : 0.4 * pending.length), stats };
+  return { words: out.map(({ word, start, end }) => ({ word, start, end })), stats };
+}
+$("#editText").onclick = () => {
+  video.pause();
+  openSheet((sh) => {
+    sh.append(el("h3", "", "Edit transcript"), el("p", "sub", "Type to fix anything: change, add or delete words. Timing is kept automatically."));
+    const ta = el("textarea"); ta.spellcheck = true;
+    ta.value = main.groups.map((g) => g.map((w) => w.word).join(" ")).join("\n");
+    const row = el("div", "btnrow");
+    const cancel = el("button", "btn ghost", "Cancel"); cancel.onclick = closeSheet;
+    const save = el("button", "btn primary", "Save changes");
+    save.onclick = async () => {
+      if (!ta.value.trim()) return toast("The transcript can't be empty.", true);
+      save.disabled = true;
+      try {
+        const r = applyEdits(words.map(({ word, start, end }) => ({ word, start, end })), ta.value);
+        const st = r.stats, n = st.changed + st.added + st.removed;
+        if (!n) { closeSheet(); return toast("No changes"); }
+        const had = new Map(words.map((w) => [w.word + "@" + w.start.toFixed(3), w]));
+        snapshot();
+        words = r.words.map((w) => { const old = had.get(w.word + "@" + w.start.toFixed(3)); const nw = { ...w, edited: old ? !!old.edited : true }; if (old && old.emoji !== undefined) nw.emoji = old.emoji; return nw; });
+        closeSheet(); refreshAll(true);
+        toast([st.changed && `${st.changed} changed`, st.added && `${st.added} added`, st.removed && `${st.removed} removed`].filter(Boolean).join(", "));
+      } catch (e) { save.disabled = false; toast(e.message, true); }
+    };
+    row.append(cancel, save); sh.append(ta, row);
+    setTimeout(() => ta.focus(), 80);
+  });
+};
+
+/* ===================== export: the app draws every frame, the engine lays them over the video ===================== */
+function resultProgress(pct, note) {
+  $("#resTitle").textContent = "Exporting";
+  const r = $("#result"); r.textContent = "";
+  const fr = el("div", "frame"); fr.append(el("div", "e-num display", Math.round(pct * 100) + "%"));
+  const bar = el("div", "w-bar"); bar.style.width = "100%"; const i = el("i"); i.style.width = Math.round(pct * 100) + "%"; bar.append(i);
+  r.append(fr, bar, el("p", "fname", note));
+}
+let exporting = false;
+const BITRATE = { standard: 6e6, high: 12e6, max: 20e6 };
+function pickMime() {
+  for (const m of ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4;codecs=avc1,mp4a", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"])
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+$("#exportBtn").onclick = async () => {
+  if (!job || !words.length) return;
+  if (isLocked(S.style)) return paywall(S.style);
+  if (exporting) return toast("Already exporting this video");
+  exporting = true; $("#exportBtn").disabled = true;
+  // create these straight away, while the tap still counts as a user action (needed for sound)
+  const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
+  const v = el("video"); v.src = objectURL; v.playsInline = true; v.preload = "auto";
+  v.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
+  document.body.append(v);
+  video.pause(); go("result"); resultProgress(0, "Getting ready…");
+  const SS = { ...S }, W = words.map((w) => ({ ...w }));
+  try {
+    keepAwake(true);
+    const vw = videoDims.w, vh = videoDims.h, scl = Math.min(1, 1920 / Math.max(vw, vh));
+    const ow = Math.max(2, Math.round(vw * scl / 2) * 2), oh = Math.max(2, Math.round(vh * scl / 2) * 2);
+    try { const f = FONT[SS.font]; await document.fonts.load(`${f ? f.w : 400} 60px "${f ? f.css : "Impact"}"`); } catch {}
+    const cnv = el("canvas"); cnv.width = ow; cnv.height = oh;
+    const ctx = cnv.getContext("2d");
+    const groups = groupWords(W, SS.words, SS.smart, INFO.gap);
+    await new Promise((res, rej) => { if (v.readyState >= 2) res(); else { v.onloadeddata = res; v.onerror = () => rej(new Error("Couldn't read the video.")); } });
+    const src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest);
+    const stream = cnv.captureStream(30);
+    dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+    const mime = pickMime();
+    const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: BITRATE[APP.quality] || 12e6, audioBitsPerSecond: 192000 });
+    const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((r) => (rec.onstop = r));
+    const dur = v.duration || job.duration;
+    let thumb = null, lastUi = 0;
+    const makeThumb = () => { const c = el("canvas"); c.width = 180; c.height = Math.round(180 * oh / ow); c.getContext("2d").drawImage(cnv, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.72); };
+    const draw = () => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(v, 0, 0, ow, oh);
+      ctx.setTransform(scl, 0, 0, scl, 0, 0); drawFrame(ctx, vw, vh, groups, v.currentTime, SS);
+      if (!thumb && v.currentTime > Math.min(dur * 0.3, 3)) thumb = makeThumb();
+      const now = performance.now();
+      if (now - lastUi > 250 && view === "result") { lastUi = now; resultProgress(Math.min(0.99, v.currentTime / dur), `Recording your video: ${fmt(v.currentTime).replace(/\.\d$/, "")} of ${fmt(dur).replace(/\.\d$/, "")}. Keep the screen on and Cool Caps open.`); }
+    };
+    const hasVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+    const onFrame = () => { draw(); if (!v.ended) v.requestVideoFrameCallback(onFrame); };
+    const loop = () => { draw(); if (!v.ended) requestAnimationFrame(loop); };
+    v.currentTime = 0; draw();
+    rec.start(500);
+    await ac.resume();
+    await v.play();
+    if (hasVFC) v.requestVideoFrameCallback(onFrame); else loop();
+    await new Promise((r) => { if (v.ended) r(); else v.onended = r; });
+    draw(); await sleep(200); rec.stop(); await stopped;
+    const type = (mime || "video/webm").split(";")[0], ext = type.includes("mp4") ? "mp4" : "webm";
+    const blob = new Blob(chunks, { type });
+    if (!blob.size) throw new Error("The recording came out empty. Keep Cool Caps open on screen while it exports, then try again.");
+    const stem = (job.name || "video").replace(/\.[^.]+$/, "");
+    const item = { id: Date.now(), name: `${stem} - ${SS.style} ${SS.words}w.${ext}`, mtime: Date.now() / 1000, size: blob.size, type, blob, thumb: thumb || makeThumb() };
+    try { await LIB.put(item); } catch {}
+    showDone(item);
+  } catch (e) {
+    if (view !== "result") toast(e.message, true);
+    else {
+      $("#resTitle").textContent = "Export failed";
+      const r = $("#result"); r.textContent = "";
+      const fr = el("div", "frame"); fr.append(el("div", "e-num display", "!")); const b = el("button", "btn ghost block", "Back to editing"); b.onclick = () => go("editor");
+      r.append(fr, el("p", "fname", e.message), b);
+    }
+  } finally {
+    exporting = false; $("#exportBtn").disabled = false; keepAwake(false);
+    try { ac.close(); } catch {}
+    v.remove();
+  }
+};
+function showDone(it) {
+  if (view !== "result") return toast("Your video is ready in the Library");
+  $("#resTitle").textContent = "Done";
+  const r = $("#result"); r.textContent = "";
+  const fr = el("div", "frame"), v = el("video"); v.src = URL.createObjectURL(it.blob); v.controls = true; v.autoplay = true; v.loop = true; v.playsInline = true; fr.append(v);
+  const row = el("div", "btnrow");
+  const save = el("button", "btn primary", "Save to phone"); save.onclick = () => saveToPhone(it);
+  const share = el("button", "btn ghost", "Share"); share.onclick = () => shareVideo(it);
+  row.append(save, share);
+  const done = el("button", "btn ghost block", "Done"); done.onclick = () => go("home");
+  r.append(fr, el("h2", "display", "It's ready."), el("p", "fname", "Kept in your Library · " + it.name), row, done);
+}
+$("#resBack").onclick = () => go(job ? "editor" : "home");
+
+/* ===================== install on the home screen ===================== */
+let installEvt = null;
+function setupInstall() {
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone) return;
+  $("#installCard").hidden = false;
+  $("#installBtn").onclick = async () => {
+    if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice.catch(() => null); if (r && r.outcome === "accepted") $("#installCard").hidden = true; installEvt = null; }
+    else toast("In Chrome, tap the ⋮ menu, then \"Add to Home screen\" or \"Install app\".");
+  };
+}
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; $("#installHow").textContent = "Opens full screen, like a real app. Tap Install."; });
+window.addEventListener("appinstalled", () => { $("#installCard").hidden = true; toast("Cool Caps is on your home screen"); });
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+/* ===================== frame loop ===================== */
+function frame(now) {
+  requestAnimationFrame(frame);
+  const sec = now / 1000;
+  if (view === "home") {
+    if (hero) {
+      const lt = sec % hero.loop;
+      if (lt < hero.last) { hero.k = (hero.k + 1) % hero.styles.length; $("#heroTag").innerHTML = `<span>Style</span>${hero.styles[hero.k]}`; hero.cap.set(hero.words, heroSettings(), 1080, 1350); }
+      hero.last = lt; hero.cap.render(lt);
+    }
+    minis.forEach((m) => { if (m.el.classList.contains("preset")) m.cap.render((sec + m.offset) % m.loop); });
+    return;
+  }
+  if (view !== "editor") return;
+  fitLayer();
+  const t = video.currentTime || 0;
+  if (main && words.length) main.render(t);
+  $("#tNow").textContent = fmt(t);
+  if (video.duration) { $("#scrub").value = t; $("#scrub").style.setProperty("--p", (t / video.duration) * 100 + "%"); }
+  if (playUntil != null && (t >= playUntil || video.paused)) { if (!video.paused) video.pause(); playUntil = null; }
+  $("#dragHint").hidden = !words.length || !!store.get("loudcaps.dragged") || !video.paused;
+  if (tool === "style") minis.forEach((m) => { if (m.el.classList.contains("scard")) m.cap.render((sec + m.offset) % m.loop); });
+  if (tool === "text" && main && words.length) {
+    let wi = -1; for (let n = 0; n < words.length; n++) { if (words[n].start <= t) wi = n; else break; }
+    if (wi >= 0 && t > words[wi].end + 0.3) wi = -1;
+    if (wi !== lastWord) {
+      const old = $(`#transcript .tw[data-i="${lastWord}"]`), cur = $(`#transcript .tw[data-i="${wi}"]`);
+      if (old) old.classList.remove("now"); if (cur) cur.classList.add("now"); lastWord = wi;
+    }
+    const gi = findGroup(main.groups, t);
+    if (gi !== lastRow) {
+      const rows = $("#transcript").children;
+      if (rows[lastRow]) rows[lastRow].classList.remove("now");
+      if (rows[gi]) { rows[gi].classList.add("now"); if (!video.paused) rows[gi].scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+      lastRow = gi;
+    }
+  }
+}
+boot();
+</script>
+</body>
+</html>

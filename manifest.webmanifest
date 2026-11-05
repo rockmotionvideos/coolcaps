@@ -1,0 +1,16 @@
+{
+  "name": "Cool Caps",
+  "short_name": "Cool Caps",
+  "description": "Animated captions for Reels, TikTok and Shorts, made on your phone",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0A0F",
+  "theme_color": "#0B0A0F",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
