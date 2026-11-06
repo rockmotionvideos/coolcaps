@@ -288,13 +288,35 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 .grp { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-md); background: var(--raised); border: 1px solid var(--line); }
 .grp-title { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 14px; }
 .grp-title small { font-weight: 500; font-size: 12px; color: var(--faint); }
-.toolbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 8px 8px 12px; border-top: 1px solid var(--line); }
+.toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 8px 8px 12px; border-top: 1px solid var(--line); }
 .toolbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 7px; border-radius: 14px; font-size: 10.5px; font-weight: 600; color: var(--muted); transition: color .15s, background .15s; }
 .toolbar button svg { width: 22px; height: 22px; }
 .toolbar button:hover { color: var(--text); }
 .toolbar button[aria-selected=true] { color: var(--accent-ink); background: var(--accent); }
 
 .sgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* styles: swipeable strip like camera filters */
+.sgrid.strip { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; margin-left: -16px !important; margin-right: -16px !important; padding: 2px 16px 6px; scrollbar-width: none; }
+.sgrid.strip::-webkit-scrollbar { display: none; }
+.sgrid.strip .scard { flex: 0 0 38%; scroll-snap-align: start; }
+.sgrid.strip .scard .demo { height: 120px; }
+.subtabs { margin-bottom: 14px; position: sticky; top: 0; z-index: 3; }
+.subtabs[hidden] { display: none; }
+/* satisfying taps */
+@keyframes popsel { 0% { transform: scale(.92); } 55% { transform: scale(1.05); } 100% { transform: scale(1); } }
+.scard[aria-pressed=true], .ftile[aria-pressed=true], .opt[aria-pressed=true], .preset[aria-pressed=true], #wpsChips button[aria-pressed=true] { animation: popsel .32s cubic-bezier(.3,1.6,.5,1); }
+.btn:active, .toolbar button:active, .seg button:active { transform: scale(.94); }
+.btn, .toolbar button, .seg button { transition: transform .12s, background .15s, color .15s; }
+/* streak + stats */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.stats[hidden] { display: none; }
+.stats div { padding: 12px 10px; border-radius: 18px; background: var(--raised); border: 1px solid var(--line); text-align: center; }
+.stats b { display: block; font: 400 30px/1 var(--display, "Anton"), sans-serif; color: var(--accent); }
+.stats span { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.stats .fire b { color: #FF8A3D; }
+.donebadge { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.donebadge span { padding: 7px 12px; border-radius: 99px; background: var(--raised); border: 1px solid var(--line-2); font-weight: 700; font-size: 13px; }
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 999; }
 .scard { position: relative; border-radius: 16px; overflow: hidden; background: var(--raised); border: 1px solid var(--line); text-align: left; transition: border-color .15s, transform .15s; }
 .scard:hover { border-color: var(--line-2); }
 .scard:active { transform: scale(.97); }
@@ -439,7 +461,12 @@ body.is-pro .probadge { display: none; }
         </span>
       </button>
       <label class="langchip"><span>Spoken language</span><select id="homeLang" aria-label="Spoken language in the video"></select></label>
-      <div class="how">
+      <div class="stats" id="stats" hidden>
+        <div class="fire"><b id="stStreak">0</b><span>🔥 day streak</span></div>
+        <div><b id="stCount">0</b><span>videos made</span></div>
+        <div><b id="stMins">0</b><span>minutes captioned</span></div>
+      </div>
+      <div class="how" id="howCards">
         <div><i>1</i><b>Add a video</b><span>Cool Caps writes the words for you, right on your phone</span></div>
         <div><i>2</i><b>Style it</b><span>Animation, font, effects</span></div>
         <div><i>3</i><b>Export</b><span>Ready to post</span></div>
@@ -568,9 +595,10 @@ body.is-pro .probadge { display: none; }
     <div class="scrub"><input type="range" id="scrub" min="0" max="1" step="0.01" value="0" aria-label="Position in video"></div>
     <div class="tools locked" id="tools">
       <div class="tool-panel" id="toolPanel">
+        <div class="seg subtabs" id="subTabs" hidden></div>
 
         <div class="tpane" data-pane="style">
-          <div class="phead"><b>Animation</b><span>Each one comes with its own look. Tap to try it, then tweak it in Font, Look and Effects.</span></div>
+          <div class="phead"><b>Pick a style</b><span>Swipe sideways, tap to try. Change the lettering in Text.</span></div>
           <div id="styleSections"></div>
         </div>
 
@@ -1212,7 +1240,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.4 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.5 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1422,7 +1450,7 @@ function buildSettings() {
   $("#stFonts").textContent = `${INFO.fonts.length} fonts`;
   $("#stVer").textContent = "Version " + (INFO.version || "1");
   $("#planRow").onclick = () => paywall(null);
-  refreshPlan(); recheckLicense();
+  refreshPlan(); recheckLicense(); renderStats();
   syncSettings();
 }
 function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
@@ -1438,7 +1466,9 @@ function syncSettings() {
 }
 
 /* ===================== editor controls ===================== */
-const TOOLS = [["style", "Animation"], ["font", "Font"], ["look", "Look"], ["fx", "Effects"], ["words", "Words"], ["text", "Transcript"]];
+const TOOLS = [["style", "Style"], ["look", "Text"], ["words", "Words"], ["text", "Edit words"]];
+const SUBS = [["font", "Font"], ["look", "Size & colour"], ["fx", "Effects"]];
+let sub = "font";
 const WPS_HINT = { 1: "One word at a time. Maximum punch.", 2: "Fast and punchy, perfect for short videos.", 3: "Balanced. The most popular choice.", 4: "Relaxed and easy to follow.", 5: "Calm, good for long talking." };
 function swatches(root, prop) {
   Object.entries(INFO.colors).forEach(([name, hex]) => { const b = el("button", "sw"); b.style.background = hex; b.dataset.hex = hex.toUpperCase(); b.setAttribute("aria-label", name); b.title = name; b.onclick = () => setS({ [prop]: hex.toUpperCase() }); root.append(b); });
@@ -1458,12 +1488,13 @@ function bindRange(id, toVal, fromS, label) {
   return () => { if (document.activeElement !== r) r.value = fromS(); fillRange(r); if (label) label(); };
 }
 function buildEditorControls() {
-  TOOLS.forEach(([k, label]) => { const b = el("button"); b.setAttribute("role", "tab"); b.dataset.tool = k; b.innerHTML = ICON[k]; b.append(label); b.onclick = () => setTool(k); $("#toolbar").append(b); });
+  SUBS.forEach(([k, label]) => { const b = el("button", "", label); b.dataset.sub = k; b.onclick = () => setTool("look", k); $("#subTabs").append(b); });
+  TOOLS.forEach(([k, label]) => { const b = el("button"); b.setAttribute("role", "tab"); b.dataset.tool = k; b.innerHTML = ICON[k === "look" ? "font" : k]; b.append(label); b.onclick = () => setTool(k); $("#toolbar").append(b); });
   STYLE_GROUPS.forEach(([title, tag, styles], gnum) => {
     const head = el("div", "sec-label"); head.append(el("span", "label", title));
     head.append(el("span", "tag " + (gnum === 0 ? "f" : "pro"), gnum === 0 ? "Free" : "Pro"));
     if (tag) head.append(el("span", "tag " + tag, tag === "y" ? "Trending" : "Wild"));
-    const grid = el("div", "sgrid"); grid.style.margin = "8px 0 14px";
+    const grid = el("div", "sgrid strip"); grid.style.margin = "8px 0 14px";
     Object.entries(styles).forEach(([key, desc], n) => {
       const k = !!KIN[key];
       const b = el("button", "scard"); b.dataset.style = key; b.title = desc;
@@ -1515,10 +1546,14 @@ function buildEditorControls() {
   $("#wpsPlus").onclick = () => setS({ words: Math.min(10, S.words + 1) });
   setTool("style"); syncControls();
 }
-function setTool(k) {
+function setTool(k, s2) {
+  if (k === "font" || k === "fx") { s2 = k; k = "look"; }
+  if (k === "look" && s2) sub = s2;
   tool = k;
   $$("#toolbar button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tool === k));
-  $$(".tpane").forEach((p) => (p.hidden = p.dataset.pane !== k));
+  $("#subTabs").hidden = k !== "look";
+  $$("#subTabs button").forEach((b) => pressed(b, b.dataset.sub === sub));
+  $$(".tpane").forEach((p) => (p.hidden = k === "look" ? p.dataset.pane !== sub : p.dataset.pane !== k));
   $("#toolPanel").scrollTop = 0;
 }
 function syncControls() {
@@ -2087,6 +2122,48 @@ $("#exportBtn").onclick = async () => {
     v.remove();
   }
 };
+/* ===================== streaks, haptics, confetti ===================== */
+const STATS_KEY = "coolcaps.stats";
+const dayStr = (d = new Date()) => d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+function getStats() { try { return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; } catch { return {}; } }
+function liveStreak(st) {
+  if (!st.last) return 0;
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  return st.last === dayStr() || st.last === dayStr(y) ? st.streak || 0 : 0;
+}
+function recordVideo(seconds) {
+  const st = getStats(), today = dayStr(), y = new Date(); y.setDate(y.getDate() - 1);
+  if (st.last !== today) st.streak = st.last === dayStr(y) ? (st.streak || 0) + 1 : 1;
+  st.last = today; st.count = (st.count || 0) + 1; st.secs = (st.secs || 0) + (seconds || 0);
+  st.best = Math.max(st.best || 0, st.streak);
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(st)); } catch {}
+  renderStats(); return st;
+}
+function renderStats() {
+  const st = getStats(), has = (st.count || 0) > 0;
+  $("#stats").hidden = !has; $("#howCards").hidden = has;
+  if (!has) return;
+  $("#stStreak").textContent = liveStreak(st); $("#stCount").textContent = st.count;
+  const m = (st.secs || 0) / 60; $("#stMins").textContent = m < 10 ? m.toFixed(1).replace(/\.0$/, "") : Math.round(m);
+}
+const buzz = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+document.addEventListener("click", (e) => { if (e.target.closest("button, .sw, .opt, label.switch")) buzz(6); }, true);
+function confetti() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const c = document.createElement("canvas"); c.id = "confetti"; document.body.append(c);
+  const dpr = Math.min(2, devicePixelRatio || 1); c.width = innerWidth * dpr; c.height = innerHeight * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr);
+  const cols = ["#FFE14D", "#FF5FA2", "#7CF2D4", "#8A7CFF", "#FFFFFF", "#FF8A3D"];
+  const P = Array.from({ length: 140 }, () => ({ x: innerWidth / 2 + (Math.random() - .5) * 80, y: innerHeight * .38, vx: (Math.random() - .5) * 13, vy: -Math.random() * 15 - 5, r: Math.random() * 6 + 4, a: Math.random() * 6, va: (Math.random() - .5) * .4, c: cols[Math.random() * cols.length | 0] }));
+  const t0 = performance.now();
+  (function step(now) {
+    const t = now - t0; g.clearRect(0, 0, innerWidth, innerHeight);
+    P.forEach((p) => { p.vy += .42; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va;
+      g.save(); g.translate(p.x, p.y); g.rotate(p.a); g.globalAlpha = Math.max(0, 1 - t / 2600); g.fillStyle = p.c; g.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); g.restore(); });
+    if (t < 2600) requestAnimationFrame(step); else c.remove();
+  })(t0);
+  buzz([18, 40, 18]);
+}
 function showDone(it) {
   if (view !== "result") return toast("Your video is ready in the Library");
   $("#resTitle").textContent = "Done";
@@ -2097,7 +2174,13 @@ function showDone(it) {
   const share = el("button", "btn ghost", "Share"); share.onclick = () => shareVideo(it);
   row.append(save, share);
   const done = el("button", "btn ghost block", "Done"); done.onclick = () => go("home");
-  r.append(fr, el("h2", "display", "It's ready."), el("p", "fname", "Kept in your Library · " + it.name), row, done);
+  const st = recordVideo((job && job.duration) || it.duration || 0);
+  const badges = el("div", "donebadge");
+  badges.append(el("span", "", `🔥 ${st.streak}-day streak`), el("span", "", `🎬 Video #${st.count}`));
+  if (st.streak > 1 && st.streak === st.best) badges.append(el("span", "", "🏆 Best streak yet"));
+  const lines = ["It's ready.", "Nailed it.", "That's a banger.", "Ready to post.", "Looking good."];
+  r.append(fr, el("h2", "display", lines[(st.count - 1) % lines.length]), badges, row, el("p", "fname", "Kept in your Library · " + it.name), done);
+  confetti();
 }
 $("#resBack").onclick = () => go(job ? "editor" : "home");
 
