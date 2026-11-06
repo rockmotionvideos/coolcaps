@@ -142,6 +142,10 @@ a.btn { color: var(--text); }
 .hello { margin: 4px 0 6px; font-size: 46px; line-height: .92; text-wrap: balance; }
 .hello .hl { color: var(--accent); }
 .lede { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
+.langchip { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 0; padding: 10px 14px; border-radius: 16px; background: var(--card, rgba(255,255,255,.05)); border: 1px solid var(--line-2); font-weight: 700; font-size: 14px; }
+.langchip span { opacity: .75; }
+.langchip select { background: transparent; color: inherit; border: 0; font: 700 15px var(--ui); text-align: right; max-width: 60%; appearance: none; -webkit-appearance: none; padding-right: 18px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: right 6px center, right 1px center; background-size: 5px 5px; background-repeat: no-repeat; }
+.langchip select option { color: #000; }
 .hero-card { position: relative; display: block; width: 100%; height: 290px; border-radius: var(--r-xl); overflow: hidden; text-align: left; border: 1px solid var(--line-2); transition: transform .2s; box-shadow: 0 30px 60px -30px rgba(0,0,0,.9); }
 .hero-card:active { transform: scale(.985); }
 body.dragging .hero-card { outline: 2px dashed var(--accent); outline-offset: 4px; }
@@ -434,6 +438,7 @@ body.is-pro .probadge { display: none; }
           <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
         </span>
       </button>
+      <label class="langchip"><span>Spoken language</span><select id="homeLang" aria-label="Spoken language in the video"></select></label>
       <div class="how">
         <div><i>1</i><b>Add a video</b><span>Cool Caps writes the words for you, right on your phone</span></div>
         <div><i>2</i><b>Style it</b><span>Animation, font, effects</span></div>
@@ -1207,7 +1212,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.2 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.3 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1399,7 +1404,9 @@ const ACC_NOTE = { base: "Fastest, smallest download. Good for clear speech.", s
 const Q_NOTE = { standard: "Smaller files, quick to upload.", high: "Looks great, sensible file size.", max: "Best quality, bigger files." };
 function buildSettings() {
   const sel = $("#langSel"); LANGS.forEach(([v, l]) => { const o = el("option", "", l); o.value = v; sel.append(o); });
-  sel.onchange = () => { APP.lang = sel.value; saveApp(); };
+  sel.onchange = () => { APP.lang = sel.value; saveApp(); $("#homeLang").value = APP.lang; };
+  const hl = $("#homeLang"); LANGS.forEach(([v, l]) => { const o = el("option", "", v ? l : "Auto-detect"); o.value = v; hl.append(o); });
+  hl.value = APP.lang; hl.onchange = () => { APP.lang = hl.value; saveApp(); sel.value = APP.lang; toast(APP.lang ? `Got it: videos are in ${langName(APP.lang)}` : "Cool Caps will work out the language"); };
   $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
   $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
@@ -1577,12 +1584,21 @@ async function load(model, device) {
 // Whisper's own language check: listen to (up to) 30 seconds from the busiest part, take one
 // decoder step after <|startoftranscript|> and pick the most likely language token.
 // Without this the library quietly assumes English.
+const WHISPER_LANGS = "en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su".split(" ");
 async function detectLanguage(audio) {
   try {
-    const tok = asr.tokenizer, ids = tok.model.tokens_to_ids;
-    const sot = ids.get("<|startoftranscript|>"); if (sot == null) return null;
+    const tok = asr.tokenizer;
+    // special tokens like <|ar|> live in the tokenizer's "added tokens", not the normal word list
+    const idOf = (t) => {
+      let id;
+      try { id = tok.model && tok.model.tokens_to_ids && tok.model.tokens_to_ids.get(t); } catch {}
+      if (id == null && Array.isArray(tok.added_tokens)) { const a = tok.added_tokens.find((x) => x.content === t); if (a) id = a.id; }
+      if (id == null) { try { const e = tok.encode(t, { add_special_tokens: false }); if (e.length === 1) id = e[0]; } catch {} }
+      return id;
+    };
+    const sot = idOf("<|startoftranscript|>"); if (sot == null) throw new Error("no start token");
     const langs = [];
-    for (const [t, id] of ids) { const m = /^<\|([a-z]{2,3}|haw|yue)\|>$/.exec(t); if (m) langs.push([m[1], id]); }
+    for (const c of WHISPER_LANGS) { const id = idOf("<|" + c + "|>"); if (id != null) langs.push([c, id]); }
     if (!langs.length) return null;
     // start where there's speech: skip leading silence
     const SR = 16000, win = 30 * SR; let start = 0;
@@ -1612,7 +1628,7 @@ self.onmessage = async (e) => {
     }
     postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
     let lang = language;
-    if (!lang) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); if (lang) postMessage({ type: "detected", lang }); }
+    if (!lang) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); postMessage({ type: "detected", lang }); }
     postMessage({ type: "stage" });
     const opts = { return_timestamps: "word", task: "transcribe" };
     if (lang) opts.language = lang;
@@ -1662,10 +1678,10 @@ async function decodeAudio(file) {
   for (let i = 0; i < a.length; i++) out[i] = (a[i] + b[i]) / 2;
   return out;
 }
-let detectedLang = "";
+let detectedLang = "", detectFailed = false;
 const langName = (c) => (LANGS.find((l) => l[0] === c) || [, c])[1];
 function transcribe(audio, onStatus) {
-  detectedLang = "";
+  detectedLang = ""; detectFailed = false;
   if (FAKE) return fetch("words.json").then((r) => r.json());
   return new Promise((resolve, reject) => {
     const w = getWorker(), files = {}, t0 = performance.now(), len = audio.length / 16000;
@@ -1690,6 +1706,7 @@ function transcribe(audio, onStatus) {
           onStatus({ pct: T ? L / T : null, stage: "Downloading the speech model", note: `First time only (${Math.round(T / 1e6)} MB). After this it starts straight away, even offline.` });
         }
       } else if (m.type === "detecting") onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
+      else if (m.type === "detected" && !m.lang) { detectFailed = true; }
       else if (m.type === "detected") { detectedLang = m.lang; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
       else if (m.type === "warn") console.warn(m.message);
       else if (m.type === "device") devKind = m.device, engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
@@ -1752,7 +1769,9 @@ function onTranscribed(j) {
   job = j; words = j.words.map((w) => ({ ...w }));
   videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
-  setWorking(false); refreshAll(true); toast(`${words.length} words transcribed`);
+  setWorking(false); refreshAll(true);
+  if (detectFailed) toast("Couldn't tell the language, so it guessed English. If that's wrong, pick the language on the home screen and add the video again.", true);
+  else toast(`${words.length} words transcribed` + (detectedLang ? ` · ${langName(detectedLang)}` : ""));
   if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
 }
 $("#wBack").onclick = () => { token++; resetWorker(); keepAwake(false); go("home"); };
