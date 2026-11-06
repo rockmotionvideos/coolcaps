@@ -475,6 +475,11 @@ body.is-pro .probadge { display: none; }
               <span class="rt"><b>Accuracy</b><span id="accNote"></span></span></div>
             <div class="seg" id="accSeg"><button data-v="base">Fast</button><button data-v="small">Balanced</button><button data-v="medium">Best</button></div>
           </div>
+          <div class="row stack">
+            <div class="rhead"><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span>
+              <span class="rt"><b>Speech engine</b><span id="engNote"></span></span></div>
+            <div class="seg" id="engSeg"><button data-v="cpu">Processor</button><button data-v="gpu">Graphics chip</button></div>
+          </div>
           <div class="row">
             <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
             <span class="rt"><b>Language</b><span>What's spoken in your videos</span></span>
@@ -551,6 +556,7 @@ body.is-pro .probadge { display: none; }
         <div class="w-stage" id="wStage"></div>
         <div class="w-bar" id="wBarWrap"><i id="wBar"></i></div>
         <p class="w-note" id="wNote"></p>
+        <button class="btn primary small" id="wSwitch" hidden>Use the processor instead</button>
         <button class="btn ghost small" id="wBack" hidden>Go back</button>
       </div>
     </div>
@@ -1122,7 +1128,7 @@ const DEFAULTS = {
 };
 const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
 const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
-const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true };
+const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu" };
 let S = { ...DEFAULTS }, APP = { ...APP_DEFAULTS };
 let words = [], history = [], job = null, view = "home", tool = "style", videoDims = { w: 1080, h: 1920 };
 const store = {
@@ -1201,12 +1207,13 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.1 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.2 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
   Promise.all(INFO.fonts.map((f) => document.fonts.load(`${f.w} 40px "${f.css}"`).catch(() => {}))).then(() => fontsVersion++);
   APP = { ...APP_DEFAULTS, ...(store.get("loudcaps.app") || {}) };
+  if (APP.engine !== "gpu") APP.engine = "cpu";  // the graphics chip is opt-in: on many phones it's far slower
   const saved = APP.remember ? store.get("loudcaps.settings") : null;
   S = { ...DEFAULTS, ...(saved || {}) };
   if (saved && saved.y == null && saved.position) S.y = POS_Y[saved.position] ?? 0.5;
@@ -1394,6 +1401,7 @@ function buildSettings() {
   const sel = $("#langSel"); LANGS.forEach(([v, l]) => { const o = el("option", "", l); o.value = v; sel.append(o); });
   sel.onchange = () => { APP.lang = sel.value; saveApp(); };
   $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
+  $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
   $("#rememberSw").onclick = () => { APP.remember = !APP.remember; saveApp(); if (APP.remember) persist(); };
   $("#resetStyle").onclick = () => { setS({ ...DEFAULTS, ...lookFor("karaoke") }); toast("Caption style reset"); };
@@ -1413,6 +1421,8 @@ function buildSettings() {
 function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
 function syncSettings() {
   $$("#accSeg button").forEach((b) => pressed(b, b.dataset.v === APP.model));
+  $$("#engSeg button").forEach((b) => pressed(b, b.dataset.v === APP.engine));
+  $("#engNote").textContent = APP.engine === "gpu" ? "Experimental. Fast on some phones, very slow on others. Switch back if it drags." : "Recommended. Fast and steady on every phone.";
   const q = APP.quality === "max" && !isPro() ? "high" : APP.quality;
   $$("#qSeg button").forEach((b) => pressed(b, b.dataset.v === q));
   $("#qMax").classList.toggle("locked", !isPro());
@@ -1540,14 +1550,15 @@ window.addEventListener("drop", (e) => {
   if (f) startFile(f); else toast("That's not a video file. Try an MP4 or MOV.", true);
 });
 
-function setWorking(on, { pct = null, stage = "", note = "", error = false } = {}) {
+function setWorking(on, { pct = null, stage = "", note = "", error = false, slow = false, cancel = false } = {}) {
   $("#working").hidden = !on; $("#tools").classList.toggle("locked", on); $("#exportBtn").disabled = on;
   if (!on) return;
   $("#wNum").textContent = error ? "Oops" : pct == null ? "" : Math.round(pct * 100) + "%";
   $("#wNum").hidden = pct == null && !error;
   $("#wStage").textContent = stage; $("#wNote").textContent = note; $("#wNote").classList.toggle("err", error);
   $("#wBarWrap").hidden = error; $("#wBarWrap").classList.toggle("ind", pct == null); $("#wBar").style.width = pct == null ? "" : Math.round(pct * 100) + "%";
-  $("#wBack").hidden = !error;
+  $("#wBack").hidden = !error && !cancel; $("#wBack").textContent = error ? "Go back" : "Cancel";
+  $("#wSwitch").hidden = !slow;
 }
 
 
@@ -1588,9 +1599,9 @@ async function detectLanguage(audio) {
 self.onmessage = async (e) => {
   const { audio, model, language } = e.data;
   try {
-    if (!asr || current !== model) {
+    if (!asr || current !== model || (e.data.cpu && device === "webgpu")) {
       postMessage({ type: "loading" });
-      let dev = self.navigator && self.navigator.gpu ? "webgpu" : "wasm";
+      let dev = !e.data.cpu && self.navigator && self.navigator.gpu ? "webgpu" : "wasm";
       try { asr = await load(model, dev); }
       catch (err) {
         if (dev === "webgpu") { dev = "wasm"; try { asr = await load(model, dev); } catch (e2) { err = e2; asr = null; } }
@@ -1637,6 +1648,7 @@ self.onmessage = async (e) => {
 const GUESS_RATE = { "base|webgpu": 0.12, "small|webgpu": 0.2, "medium|webgpu": 0.55, "base|wasm": 0.3, "small|wasm": 0.6, "medium|wasm": 1.8 };
 const MODELS = { base: "onnx-community/whisper-tiny_timestamped", small: "onnx-community/whisper-base_timestamped", medium: "onnx-community/whisper-small_timestamped" };
 let asrWorker = null;
+function resetWorker() { if (asrWorker) { try { asrWorker.terminate(); } catch {} asrWorker = null; } }
 function getWorker() {
   if (!asrWorker) asrWorker = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: "text/javascript" })), { type: "module" });
   return asrWorker;
@@ -1659,10 +1671,13 @@ function transcribe(audio, onStatus) {
     const w = getWorker(), files = {}, t0 = performance.now(), len = audio.length / 16000;
     let timer = null, tStage = t0, engine = "phone", devKind = "wasm", rateKey = "", est = 0, done = 0;
     const tick = () => {
+      if (asrWorker !== w) { clearInterval(timer); return; }  // cancelled
       const el2 = (performance.now() - tStage) / 1000, left = est - el2;
       const pct = Math.max(done, Math.min(0.97, est ? el2 / est : 0));
-      onStatus({ pct, stage: "Transcribing your video" + (detectedLang ? " · " + langName(detectedLang) : ""),
-        note: (done >= 1 ? "Finishing up…" : left > 1.5 ? `About ${secsText(left)} left` : "Almost done…") + ` · using your ${engine}` });
+      const slow = devKind === "webgpu" && done < 1 && el2 > Math.max(45, est * 2.5);
+      onStatus({ pct, stage: "Transcribing your video" + (detectedLang ? " · " + langName(detectedLang) : ""), slow, cancel: true,
+        note: slow ? `This is taking longer than it should on your ${engine}. You can keep waiting, or start again on the faster setting.`
+          : (done >= 1 ? "Finishing up…" : left > 1.5 ? `About ${secsText(left)} left` : "Almost done…") + ` · using your ${engine}` });
     };
     const finish = () => { clearInterval(timer); w.onmessage = null; w.onerror = null; };
     w.onmessage = (e) => {
@@ -1684,7 +1699,7 @@ function transcribe(audio, onStatus) {
         done = m.done; if (done > 0.02 && done < 1) est = el2 / done;
         tick();
       }
-      else if (m.type === "loading") onStatus({ pct: null, stage: "Getting ready", note: "Warming up the speech engine on your phone." });
+      else if (m.type === "loading") onStatus({ pct: null, stage: "Getting ready", note: "Warming up the speech engine on your phone.", cancel: true });
       else if (m.type === "stage") {
         tStage = performance.now();
         rateKey = (APP.model || "small") + "|" + devKind;
@@ -1698,7 +1713,7 @@ function transcribe(audio, onStatus) {
       else if (m.type === "error") { finish(); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
     };
     w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
-    w.postMessage({ audio, model: MODELS[APP.model] || MODELS.small, language: APP.lang || null }, [audio.buffer]);
+    w.postMessage({ audio, model: MODELS[APP.model] || MODELS.small, language: APP.lang || null, cpu: APP.engine !== "gpu" }, [audio.buffer]);
   });
 }
 let objectURL = null, token = 0, wakeLock = null;
@@ -1740,7 +1755,13 @@ function onTranscribed(j) {
   setWorking(false); refreshAll(true); toast(`${words.length} words transcribed`);
   if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
 }
-$("#wBack").onclick = () => { token++; go("home"); };
+$("#wBack").onclick = () => { token++; resetWorker(); keepAwake(false); go("home"); };
+// Stuck on the graphics chip? Start again on the processor with the Fast model (works on every phone).
+$("#wSwitch").onclick = () => {
+  resetWorker(); APP.engine = "cpu"; if (APP.model === "medium") APP.model = "small"; saveApp();
+  toast("Switched to the processor. Starting again…");
+  if (currentFile) startFile(currentFile);
+};
 $("#edBack").onclick = () => { token++; go("home"); };
 $("#guideOk").onclick = () => { $("#guide").hidden = true; store.set("loudcaps.guided", true); };
 
