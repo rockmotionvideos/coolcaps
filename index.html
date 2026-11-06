@@ -478,7 +478,7 @@ body.is-pro .probadge { display: none; }
           <div class="row stack">
             <div class="rhead"><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
               <span class="rt"><b>Accuracy</b><span id="accNote"></span></span></div>
-            <div class="seg" id="accSeg"><button data-v="base">Fast</button><button data-v="small">Balanced</button><button data-v="medium">Best</button></div>
+            <div class="seg" id="accSeg"><button data-v="base">Fast</button><button data-v="small">Balanced</button><button data-v="medium">Best</button><button data-v="max">Max</button></div>
           </div>
           <div class="row stack">
             <div class="rhead"><span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></span>
@@ -1212,7 +1212,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.3 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.4 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1400,13 +1400,13 @@ function openPlayer(it) {
 
 /* ===================== settings ===================== */
 const LANGS = [["", "Auto-detect (any language)"], ["af", "Afrikaans"], ["sq", "Albanian"], ["am", "Amharic"], ["ar", "Arabic"], ["hy", "Armenian"], ["as", "Assamese"], ["az", "Azerbaijani"], ["ba", "Bashkir"], ["eu", "Basque"], ["be", "Belarusian"], ["bn", "Bengali"], ["bs", "Bosnian"], ["br", "Breton"], ["bg", "Bulgarian"], ["my", "Burmese"], ["yue", "Cantonese"], ["ca", "Catalan"], ["zh", "Chinese"], ["hr", "Croatian"], ["cs", "Czech"], ["da", "Danish"], ["nl", "Dutch"], ["en", "English"], ["et", "Estonian"], ["fo", "Faroese"], ["fi", "Finnish"], ["fr", "French"], ["gl", "Galician"], ["ka", "Georgian"], ["de", "German"], ["el", "Greek"], ["gu", "Gujarati"], ["ht", "Haitian Creole"], ["ha", "Hausa"], ["haw", "Hawaiian"], ["he", "Hebrew"], ["hi", "Hindi"], ["hu", "Hungarian"], ["is", "Icelandic"], ["id", "Indonesian"], ["it", "Italian"], ["ja", "Japanese"], ["jw", "Javanese"], ["kn", "Kannada"], ["kk", "Kazakh"], ["km", "Khmer"], ["ko", "Korean"], ["lo", "Lao"], ["la", "Latin"], ["lv", "Latvian"], ["ln", "Lingala"], ["lt", "Lithuanian"], ["lb", "Luxembourgish"], ["mk", "Macedonian"], ["mg", "Malagasy"], ["ms", "Malay"], ["ml", "Malayalam"], ["mt", "Maltese"], ["mi", "Maori"], ["mr", "Marathi"], ["mn", "Mongolian"], ["ne", "Nepali"], ["no", "Norwegian"], ["nn", "Nynorsk"], ["oc", "Occitan"], ["ps", "Pashto"], ["fa", "Persian"], ["pl", "Polish"], ["pt", "Portuguese"], ["pa", "Punjabi"], ["ro", "Romanian"], ["ru", "Russian"], ["sa", "Sanskrit"], ["sr", "Serbian"], ["sn", "Shona"], ["sd", "Sindhi"], ["si", "Sinhala"], ["sk", "Slovak"], ["sl", "Slovenian"], ["so", "Somali"], ["es", "Spanish"], ["su", "Sundanese"], ["sw", "Swahili"], ["sv", "Swedish"], ["tl", "Tagalog"], ["tg", "Tajik"], ["ta", "Tamil"], ["tt", "Tatar"], ["te", "Telugu"], ["th", "Thai"], ["bo", "Tibetan"], ["tr", "Turkish"], ["tk", "Turkmen"], ["uk", "Ukrainian"], ["ur", "Urdu"], ["uz", "Uzbek"], ["vi", "Vietnamese"], ["cy", "Welsh"], ["yi", "Yiddish"], ["yo", "Yoruba"]];
-const ACC_NOTE = { base: "Fastest, smallest download. Good for clear speech.", small: "Right for most videos.", medium: "Most accurate, but slower and a much bigger download." };
+const ACC_NOTE = { base: "Fastest, smallest download. Good for clear speech.", small: "Right for most videos.", medium: "More accurate, a bit slower and a bigger download.", max: "The most accurate by far, especially for Arabic and other non-English languages. Big one-time download (several hundred MB, use Wi-Fi) and slower to transcribe." };
 const Q_NOTE = { standard: "Smaller files, quick to upload.", high: "Looks great, sensible file size.", max: "Best quality, bigger files." };
 function buildSettings() {
   const sel = $("#langSel"); LANGS.forEach(([v, l]) => { const o = el("option", "", l); o.value = v; sel.append(o); });
   sel.onchange = () => { APP.lang = sel.value; saveApp(); $("#homeLang").value = APP.lang; };
   const hl = $("#homeLang"); LANGS.forEach(([v, l]) => { const o = el("option", "", v ? l : "Auto-detect"); o.value = v; hl.append(o); });
-  hl.value = APP.lang; hl.onchange = () => { APP.lang = hl.value; saveApp(); sel.value = APP.lang; toast(APP.lang ? `Got it: videos are in ${langName(APP.lang)}` : "Cool Caps will work out the language"); };
+  hl.value = APP.lang; hl.onchange = () => { APP.lang = hl.value; saveApp(); sel.value = APP.lang; toast(APP.lang ? `Got it: videos are in ${langName(APP.lang)}` + (APP.lang !== "en" && APP.model !== "max" ? ". Tip: set Accuracy to Max in Settings for the best results." : "") : "Cool Caps will work out the language"); };
   $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
   $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
@@ -1576,9 +1576,10 @@ const THREADS = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.ha
 env.backends.onnx.wasm.numThreads = THREADS;
 let asr = null, current = "", device = "";
 async function load(model, device) {
+  const big = /large/.test(model);
   const opts = device === "webgpu"
-    ? { device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" } }
-    : { device: "wasm", dtype: "q8" };
+    ? { device: "webgpu", dtype: { encoder_model: big ? "fp16" : "fp32", decoder_model_merged: "q4" } }
+    : { device: "wasm", dtype: big ? { encoder_model: "q4", decoder_model_merged: "q4" } : "q8" };
   return pipeline("automatic-speech-recognition", model, { ...opts, progress_callback: (p) => postMessage({ type: "progress", p }) });
 }
 // Whisper's own language check: listen to (up to) 30 seconds from the busiest part, take one
@@ -1661,8 +1662,8 @@ self.onmessage = async (e) => {
   } catch (err) { postMessage({ type: "error", message: String((err && err.message) || err) }); }
 };`;
 // first-time guesses: seconds of work per second of video (replaced by this phone's real speed after one run)
-const GUESS_RATE = { "base|webgpu": 0.12, "small|webgpu": 0.2, "medium|webgpu": 0.55, "base|wasm": 0.3, "small|wasm": 0.6, "medium|wasm": 1.8 };
-const MODELS = { base: "onnx-community/whisper-tiny_timestamped", small: "onnx-community/whisper-base_timestamped", medium: "onnx-community/whisper-small_timestamped" };
+const GUESS_RATE = { "base|webgpu": 0.12, "small|webgpu": 0.2, "medium|webgpu": 0.55, "base|wasm": 0.3, "small|wasm": 0.6, "medium|wasm": 1.8, "max|webgpu": 1.2, "max|wasm": 3 };
+const MODELS = { base: "onnx-community/whisper-tiny_timestamped", small: "onnx-community/whisper-base_timestamped", medium: "onnx-community/whisper-small_timestamped", max: "onnx-community/whisper-large-v3-turbo_timestamped" };
 let asrWorker = null;
 function resetWorker() { if (asrWorker) { try { asrWorker.terminate(); } catch {} asrWorker = null; } }
 function getWorker() {
@@ -1771,6 +1772,7 @@ function onTranscribed(j) {
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
   setWorking(false); refreshAll(true);
   if (detectFailed) toast("Couldn't tell the language, so it guessed English. If that's wrong, pick the language on the home screen and add the video again.", true);
+  else if ((detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en" && APP.model !== "max") toast(`${words.length} words · ${langName(detectedLang || APP.lang)}. Not quite right? Settings → Accuracy → Max is much better for this language.`, true);
   else toast(`${words.length} words transcribed` + (detectedLang ? ` · ${langName(detectedLang)}` : ""));
   if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
 }
