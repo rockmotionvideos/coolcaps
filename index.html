@@ -144,6 +144,10 @@ a.btn { color: var(--text); }
 .lede { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
 .langchip { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 0; padding: 10px 14px; border-radius: 16px; background: var(--card, rgba(255,255,255,.05)); border: 1px solid var(--line-2); font-weight: 700; font-size: 14px; }
 .langchip span { opacity: .75; }
+.outchip { margin-top: 8px; }
+.outchip > span, .seg.mini button { white-space: nowrap; }
+.seg.mini { padding: 3px; border-radius: 12px; gap: 2px; }
+.seg.mini button { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 9px; opacity: 1; }
 .langchip select { background: transparent; color: inherit; border: 0; font: 700 15px var(--ui); text-align: right; max-width: 60%; appearance: none; -webkit-appearance: none; padding-right: 18px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: right 6px center, right 1px center; background-size: 5px 5px; background-repeat: no-repeat; }
 .langchip select option { color: #000; }
 .hero-card { position: relative; display: block; width: 100%; height: 290px; border-radius: var(--r-xl); overflow: hidden; text-align: left; border: 1px solid var(--line-2); transition: transform .2s; box-shadow: 0 30px 60px -30px rgba(0,0,0,.9); }
@@ -469,6 +473,7 @@ body.is-pro .probadge { display: none; }
         </span>
       </button>
       <label class="langchip"><span>Spoken language</span><select id="homeLang" aria-label="Spoken language in the video"></select></label>
+      <div class="langchip outchip"><span>Captions in</span><div class="seg mini" id="outSeg" role="group" aria-label="Caption language"><button data-v="same">Original</button><button data-v="en">English</button></div></div>
       <div class="stats" id="stats" hidden>
         <div class="fire"><b id="stStreak">0</b><span>🔥 day streak</span></div>
         <div><b id="stCount">0</b><span>videos made</span></div>
@@ -1236,7 +1241,7 @@ const DEFAULTS = {
 };
 const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
 const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
-const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu" };
+const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same" };
 let S = { ...DEFAULTS }, APP = { ...APP_DEFAULTS };
 let words = [], history = [], job = null, view = "home", tool = "style", videoDims = { w: 1080, h: 1920 };
 const store = {
@@ -1315,7 +1320,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.0 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.1 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1615,6 +1620,10 @@ function buildSettings() {
   const hl = $("#homeLang"); LANGS.forEach(([v, l]) => { const o = el("option", "", v ? l : "Auto-detect"); o.value = v; hl.append(o); });
   hl.value = APP.lang; hl.onchange = () => { APP.lang = hl.value; saveApp(); sel.value = APP.lang; toast(APP.lang ? `Got it: videos are in ${langName(APP.lang)}` + (APP.lang !== "en" && APP.model !== "max" ? ". Tip: set Accuracy to Max in Settings for the best results." : "") : "Cool Caps will work out the language"); };
   $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
+  $$("#outSeg button").forEach((b) => (b.onclick = () => {
+    APP.out = b.dataset.v; saveApp(); syncSettings();
+    toast(APP.out === "en" ? "Captions will be translated into English" : "Captions will be in the language that's spoken");
+  }));
   $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
   $("#rememberSw").onclick = () => { APP.remember = !APP.remember; saveApp(); if (APP.remember) persist(); };
@@ -1635,6 +1644,7 @@ function buildSettings() {
 function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
 function syncSettings() {
   $$("#accSeg button").forEach((b) => pressed(b, b.dataset.v === APP.model));
+  $$("#outSeg button").forEach((b) => pressed(b, b.dataset.v === (APP.out || "same")));
   $$("#engSeg button").forEach((b) => pressed(b, b.dataset.v === APP.engine));
   $("#engNote").textContent = APP.engine === "gpu" ? "Experimental. Fast on some phones, very slow on others. Switch back if it drags." : "Recommended. Fast and steady on every phone.";
   const q = APP.quality === "max" && !isPro() ? "high" : APP.quality;
@@ -1829,7 +1839,7 @@ async function detectLanguage(audio) {
   } catch (err) { postMessage({ type: "warn", message: "language check failed: " + (err && err.message || err) }); return null; }
 }
 self.onmessage = async (e) => {
-  const { audio, model, language } = e.data;
+  const { audio, model, language, translate } = e.data;
   try {
     if (!asr || current !== model || (e.data.cpu && device === "webgpu")) {
       postMessage({ type: "loading" });
@@ -1846,7 +1856,8 @@ self.onmessage = async (e) => {
     let lang = language;
     if (!lang) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); postMessage({ type: "detected", lang }); }
     postMessage({ type: "stage" });
-    const opts = { return_timestamps: "word", task: "transcribe" };
+    // translate: Whisper writes English captions straight from the foreign speech (skipped if it's already English)
+    const opts = { return_timestamps: "word", task: translate && lang !== "en" ? "translate" : "transcribe" };
     if (lang) opts.language = lang;
     // Cut the audio into pieces of up to 30 s (Whisper's window), splitting in the quietest spot
     // so no word gets chopped. No overlap needed, which saves about a third of the work,
@@ -1907,7 +1918,8 @@ function transcribe(audio, onStatus) {
       const el2 = (performance.now() - tStage) / 1000, left = est - el2;
       const pct = Math.max(done, Math.min(0.97, est ? el2 / est : 0));
       const slow = devKind === "webgpu" && done < 1 && el2 > Math.max(45, est * 2.5);
-      onStatus({ pct, stage: "Transcribing your video" + (detectedLang ? " · " + langName(detectedLang) : ""), slow, cancel: true,
+      const tr = APP.out === "en" && detectedLang !== "en" && (detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en";
+      onStatus({ pct, stage: (tr ? "Translating your video" : "Transcribing your video") + (detectedLang ? " · " + langName(detectedLang) + (tr ? " → English" : "") : ""), slow, cancel: true,
         note: slow ? `This is taking longer than it should on your ${engine}. You can keep waiting, or start again on the faster setting.`
           : (done >= 1 ? "Finishing up…" : left > 1.5 ? `About ${secsText(left)} left` : "Almost done…") + ` · using your ${engine}` });
     };
@@ -1946,7 +1958,9 @@ function transcribe(audio, onStatus) {
       else if (m.type === "error") { finish(); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
     };
     w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
-    w.postMessage({ audio, model: MODELS[APP.model] || MODELS.small, language: APP.lang || null, cpu: APP.engine !== "gpu" }, [audio.buffer]);
+    const translate = APP.out === "en";
+    const mkey = translate && APP.model === "max" ? "medium" : APP.model;  // Max (turbo) can't translate; Best can
+    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language: APP.lang || null, cpu: APP.engine !== "gpu", translate }, [audio.buffer]);
   });
 }
 let objectURL = null, token = 0, wakeLock = null;
@@ -1987,6 +2001,7 @@ function onTranscribed(j) {
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
   setWorking(false); refreshAll(true);
   if (detectFailed) toast("Couldn't tell the language, so it guessed English. If that's wrong, pick the language on the home screen and add the video again.", true);
+  else if (APP.out === "en" && (detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en") toast(`${words.length} words · translated from ${langName(detectedLang || APP.lang)} to English. Word timing can be a little looser when translating.`);
   else if ((detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en" && APP.model !== "max") toast(`${words.length} words · ${langName(detectedLang || APP.lang)}. Not quite right? Settings → Accuracy → Max is much better for this language.`, true);
   else toast(`${words.length} words transcribed` + (detectedLang ? ` · ${langName(detectedLang)}` : ""));
   if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
