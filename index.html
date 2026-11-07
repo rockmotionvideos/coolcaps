@@ -319,6 +319,14 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 999; }
 .scard { position: relative; border-radius: 16px; overflow: hidden; background: var(--raised); border: 1px solid var(--line); text-align: left; transition: border-color .15s, transform .15s; }
 .scard:hover { border-color: var(--line-2); }
+.scard.addmine { display: grid; place-items: center; align-content: center; gap: 6px; min-height: 152px; border: 1.5px dashed var(--line-2); background: transparent; color: var(--accent); font-weight: 800; font-size: 14px; text-align: center; }
+.scard.addmine .plus { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #111; font-size: 26px; font-weight: 700; line-height: 1; }
+.scard.addmine small { color: var(--muted); font-weight: 600; font-size: 11.5px; padding: 0 8px; }
+.scard .more { position: absolute; top: 6px; right: 6px; z-index: 2; width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; font: 800 15px/1 var(--ui); display: grid; place-items: center; }
+.scard.mine b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+a.linkrow { color: inherit; text-decoration: none; }
+a.linkrow .chev { margin-left: auto; font-size: 26px; line-height: 1; color: var(--muted); padding-left: 10px; }
+.sharecard { padding: 16px; border-radius: 20px; background: var(--raised); border: 1px solid var(--line-2); text-align: center; font-weight: 800; font-size: 20px; }
 .scard:active { transform: scale(.97); }
 .scard .demo { position: relative; height: 90px; }
 .scard b { display: block; padding: 7px 10px 9px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
@@ -563,6 +571,7 @@ body.is-pro .probadge { display: none; }
           <div class="row"><span class="rt"><b>Speech engine</b><span id="stWhisper"></span></span></div>
           <div class="row"><span class="rt"><b>Video engine</b><span id="stFfmpeg"></span></span></div>
           <div class="row"><span class="rt"><b>Caption fonts</b><span id="stFonts"></span></span></div>
+          <a class="row linkrow" href="privacy.html"><span class="rt"><b>Privacy</b><span>Your videos never leave your phone. Read how it works</span></span><span class="chev">›</span></a>
           <div class="row"><span class="rt"><b>Cool Caps</b><span id="stVer"></span></span></div>
         </div>
       </div>
@@ -599,6 +608,8 @@ body.is-pro .probadge { display: none; }
 
         <div class="tpane" data-pane="style">
           <div class="phead"><b>Pick a style</b><span>Swipe sideways, tap to try. Change the lettering in Text.</span></div>
+          <div class="sec-label"><span class="label">My styles</span><span class="tag y">Yours</span></div>
+          <div class="sgrid strip" id="myStyles" style="margin:8px 0 14px"></div>
           <div id="styleSections"></div>
         </div>
 
@@ -805,7 +816,7 @@ const NO_HL = new Set(["fade", "plain", "blur"]);
    Paste your Lemon Squeezy checkout link into CHECKOUT_URL. Until it's filled in, the buy button
    says "coming soon" but license keys can still be entered. PRODUCT_ID (optional) makes sure a key
    belongs to Cool Caps Pro and not some other product in your store. */
-const LOCK_PRO = true;
+const LOCK_PRO = false;           // launch: everything free. Set to true once CHECKOUT_URL is filled in.
 const CHECKOUT_URL = "";            // e.g. "https://coolcaps.lemonsqueezy.com/buy/xxxxxxxx"
 const PRODUCT_ID = 0;              // your Lemon Squeezy product id, 0 = don't check
 const PRO_PRICE = "A$7.99";        // shown on the upgrade screen
@@ -1304,7 +1315,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "2.6 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.0 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1338,6 +1349,110 @@ function refreshAll(regroup) {
 function setS(patch) {
   const regroup = "words" in patch || "smart" in patch || "emoji" in patch;
   Object.assign(S, patch); persist(); syncControls(); refreshAll(regroup);
+}
+
+/* ===================== my styles: save, name and share your look ===================== */
+const MY_KEY = "coolcaps.mystyles";
+const myStyles = () => store.get(MY_KEY) || [];
+const saveMy = (list) => store.set(MY_KEY, list);
+const styleOnly = (src) => { const o = {}; for (const k of Object.keys(DEFAULTS)) if (k in src) o[k] = src[k]; return o; };
+function encodeStyle(name, st) {
+  const diff = {}; for (const [k, v] of Object.entries(styleOnly(st))) if (JSON.stringify(v) !== JSON.stringify(DEFAULTS[k])) diff[k] = v;
+  const raw = unescape(encodeURIComponent(JSON.stringify({ n: name, s: diff })));
+  return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function decodeStyle(code) {
+  try {
+    const b = code.replace(/-/g, "+").replace(/_/g, "/"), j = JSON.parse(decodeURIComponent(escape(atob(b + "===".slice((b.length + 3) % 4)))));
+    if (!j || typeof j.s !== "object") return null;
+    const st = { ...DEFAULTS, ...styleOnly(j.s) };
+    if (!ALL_STYLES[st.style]) st.style = "karaoke";
+    if (st.font && !FONT[st.font]) st.font = null;
+    return { name: String(j.n || "Shared style").slice(0, 40), s: st };
+  } catch { return null; }
+}
+const shareLink = (m) => location.origin + location.pathname + "#style=" + encodeStyle(m.name, m.s);
+async function shareStyle(m) {
+  const url = shareLink(m), text = `Try my caption style "${m.name}" on Cool Caps 🔥`;
+  try { if (navigator.share) { await navigator.share({ title: `${m.name} · Cool Caps`, text, url }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+  try { await navigator.clipboard.writeText(text + " " + url); toast("Link copied. Paste it anywhere to share your style"); }
+  catch { prompt("Copy this link to share your style:", url); }
+}
+function renderMyStyles() {
+  const row = $("#myStyles"); if (!row) return;
+  for (let i = minis.length - 1; i >= 0; i--) if (minis[i].mine) minis.splice(i, 1);
+  row.textContent = "";
+  const add = el("button", "scard addmine"); add.append(el("span", "plus", "+"), el("span", "", "Save my style"), el("small", "", "Keep this look and share it"));
+  add.onclick = () => nameStyleSheet(null);
+  row.append(add);
+  myStyles().forEach((m, n) => {
+    const b = el("button", "scard mine"); b.title = m.name;
+    const demo = el("div", "demo footage"), layer = el("div", "cap-layer"); demo.append(layer);
+    const more = el("span", "more", "⋯"); more.setAttribute("role", "button"); more.setAttribute("aria-label", "Options for " + m.name);
+    more.onclick = (e) => { e.stopPropagation(); myStyleMenu(m); };
+    b.append(demo, more, el("b", "", m.name));
+    b.onclick = () => { if (isLocked(m.s.style)) return paywall(m.s.style); setS({ ...styleOnly(m.s), x: S.x, y: S.y, position: S.position }); toast(`Using "${m.name}"`); };
+    row.append(b);
+    const k = !!KIN[m.s.style];
+    const cap = new Captioner(layer);
+    minis.push({ mine: true, cap, words: k ? DEMO_K : DEMO, vw: 600, vh: 430, offset: n * 0.41, loop: k ? 2.4 : 1.85, el: b,
+      settings: () => ({ ...m.s, size: k ? 44 : 56, x: 0.5, y: 0.5, words: Math.min(3, m.s.words || 3), smart: false, emoji: false, maxw: 0.92, line: 1, scale: 1 }) });
+    cap.set(k ? DEMO_K : DEMO, minis[minis.length - 1].settings(), 600, 430);
+  });
+}
+function nameStyleSheet(existing) {
+  openSheet((sh) => {
+    sh.append(el("h3", "display", existing ? "Rename style" : "Save my style"));
+    if (!existing) sh.append(el("p", "sub", "Saves your animation, font, colours, effects and words per screen. Use it again in one tap, or share it with a link."));
+    const inp = el("input"); inp.type = "text"; inp.maxLength = 30; inp.placeholder = "Name it, like Fire Caps";
+    inp.value = existing ? existing.name : "";
+    const go2 = el("button", "btn primary block", existing ? "Save name" : "Save style");
+    const doSave = () => {
+      const name = inp.value.trim() || `My style ${myStyles().length + 1}`, list = myStyles();
+      if (existing) { const it = list.find((x) => x.id === existing.id); if (it) it.name = name; }
+      else list.unshift({ id: Date.now(), name, s: styleOnly(S) });
+      saveMy(list); closeSheet(); renderMyStyles(); buzz([10, 30, 10]);
+      toast(existing ? "Renamed" : `Saved "${name}". Find it under My styles`);
+    };
+    go2.onclick = doSave; inp.onkeydown = (e) => { if (e.key === "Enter") doSave(); };
+    sh.append(inp, go2); setTimeout(() => inp.focus(), 80);
+  });
+}
+function myStyleMenu(m) {
+  openSheet((sh) => {
+    sh.append(el("h3", "display", m.name));
+    const share = el("button", "btn primary block", "Share this style"); share.onclick = () => { closeSheet(); shareStyle(m); };
+    const ren = el("button", "btn ghost block", "Rename"); ren.onclick = () => nameStyleSheet(m);
+    const upd = el("button", "btn ghost block", "Update it to the current look"); upd.onclick = () => { const list = myStyles(), it = list.find((x) => x.id === m.id); if (it) it.s = styleOnly(S); saveMy(list); closeSheet(); renderMyStyles(); toast("Updated"); };
+    const del = el("button", "btn danger block", "Delete");
+    del.onclick = () => { if (!del.dataset.sure) { del.dataset.sure = 1; del.textContent = "Tap again to delete"; return; } saveMy(myStyles().filter((x) => x.id !== m.id)); closeSheet(); renderMyStyles(); toast("Deleted"); };
+    sh.append(share, ren, upd, del);
+  });
+}
+// opened from someone's share link?
+window.addEventListener("hashchange", () => checkSharedStyle());
+function checkSharedStyle() {
+  // keep it in session storage too, so it survives the one-time reload on someone's first visit
+  const m = /[#&]style=([A-Za-z0-9_-]+)/.exec(location.hash);
+  let code = m && m[1];
+  if (code) { try { sessionStorage.setItem("coolcaps.pendingStyle", code); } catch {} window.history.replaceState(null, "", location.pathname + location.search); }
+  else { try { code = sessionStorage.getItem("coolcaps.pendingStyle"); } catch {} }
+  if (!code || $("#veil")) return;
+  const done = () => { try { sessionStorage.removeItem("coolcaps.pendingStyle"); } catch {} };
+  const got = decodeStyle(code); if (!got) { done(); return toast("That style link didn't work", true); }
+  openSheet((sh) => {
+    sh.append(el("span", "tag y", "Shared with you"), el("h3", "display", "New caption style"));
+    sh.append(el("div", "sharecard", got.name));
+    sh.append(el("p", "sub", `${got.s.words} word${got.s.words > 1 ? "s" : ""} per screen · ${got.s.style} animation. Save it and it'll be under My styles in the editor.`));
+    const add = el("button", "btn primary block", "Save and use this style");
+    add.onclick = () => {
+      done();
+      const list = myStyles(); list.unshift({ id: Date.now(), name: got.name, s: got.s }); saveMy(list);
+      setS(styleOnly(got.s)); renderMyStyles(); closeSheet(); buzz([10, 30, 10]); toast(`"${got.name}" is ready. Add a video to try it`);
+    };
+    const no = el("button", "btn ghost block", "No thanks"); no.onclick = () => { done(); closeSheet(); };
+    sh.append(add, no);
+  });
 }
 
 /* ===================== home ===================== */
@@ -1428,7 +1543,7 @@ function paywall(style) {
     sh.classList.add("pw");
     if (isPro()) {
       sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Pro is on"));
-      sh.append(el("p", "sub", LOCK_PRO ? "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." : "Beta: everything is unlocked for now."));
+      sh.append(el("p", "sub", LOCK_PRO ? "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." : "Launch special: every style, no watermark and Max quality are free for now. Enjoy!"));
       if (LIC && LIC.key) {
         sh.append(el("p", "sub", "License key " + maskKey(LIC.key) + (LIC.email ? " · " + LIC.email : "")));
         const rm = el("button", "btn danger block", "Remove Pro from this phone");
@@ -1467,7 +1582,7 @@ function paywall(style) {
   });
 }
 function refreshPlan() {
-  const n = $("#planNote"); if (n) n.textContent = !LOCK_PRO ? "Beta: all Pro styles are unlocked for now" : isPro() ? "Pro is on. Thank you!" : `Free plan · unlock everything for ${PRO_PRICE}`;
+  const n = $("#planNote"); if (n) n.textContent = !LOCK_PRO ? "Launch special: every Pro style is free for now 🎉" : isPro() ? "Pro is on. Thank you!" : `Free plan · unlock everything for ${PRO_PRICE}`;
   document.body.classList.toggle("is-pro", isPro());
   if (typeof syncSettings === "function") try { syncSettings(); } catch {}
   if (main && typeof video !== "undefined") try { main.render(video.currentTime); } catch {}
@@ -1510,11 +1625,11 @@ function buildSettings() {
     await LIB.clear().catch(() => {}); b.dataset.sure = ""; b.textContent = "Clear"; toast("Library cleared"); loadRecent();
   };
   $("#stWhisper").innerHTML = '<span class="ok">Runs right on this phone</span>';
-  $("#stFfmpeg").innerHTML = '<span class="ok">Built into Chrome</span>';
+  $("#stFfmpeg").innerHTML = "VideoEncoder" in window ? '<span class="ok">Fast export with your phone\'s video chip</span>' : '<span class="ok">Built into your browser</span>';
   $("#stFonts").textContent = `${INFO.fonts.length} fonts`;
   $("#stVer").textContent = "Version " + (INFO.version || "1");
   $("#planRow").onclick = () => paywall(null);
-  refreshPlan(); recheckLicense(); renderStats();
+  refreshPlan(); recheckLicense(); renderStats(); setTimeout(checkSharedStyle, 400);
   syncSettings();
 }
 function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
@@ -1572,6 +1687,7 @@ function buildEditorControls() {
     });
     $("#styleSections").append(head, grid);
   });
+  renderMyStyles();
   INFO.fonts.forEach((f) => {
     const b = el("button", "ftile"); b.dataset.font = f.key; const aa = el("span", "aa", "Aa"); aa.style.fontFamily = fontStack(f.key);
     const lab = el("small", "", f.label); lab.append(el("i", "", f.vibe));
@@ -2109,6 +2225,319 @@ function pickMime() {
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
   return "";
 }
+/* ===================== fast export =====================
+   Instead of playing the video in real time and recording the screen, this reads the MP4 file
+   directly, decodes each frame on the phone's video chip, draws the captions on it, encodes it
+   again, and copies the original sound across untouched. Usually several times faster than the
+   video's length. Anything it can't handle (WebM files, odd codecs, old browsers) falls back to
+   the real-time method, so exporting never breaks. */
+const FX = (() => {
+  const u32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+  const i32 = (b, o) => (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+  const u16 = (b, o) => (b[o] << 8) | b[o + 1];
+  const typ = (b, o) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
+  const CONTAINERS = new Set(["moov", "trak", "mdia", "minf", "stbl", "edts", "dinf"]);
+
+  // walk boxes inside a byte array: returns [{type, start, end, hdr}]
+  function kids(b, start, end) {
+    const out = [];
+    let o = start;
+    while (o + 8 <= end) {
+      let size = u32(b, o), hdr = 8;
+      const t = typ(b, o + 4);
+      if (size === 1) { size = u32(b, o + 8) * 4294967296 + u32(b, o + 12); hdr = 16; }
+      else if (size === 0) size = end - o;
+      if (size < hdr || o + size > end) break;
+      out.push({ type: t, start: o, end: o + size, hdr });
+      o += size;
+    }
+    return out;
+  }
+  const find = (b, box, t) => kids(b, box.start + box.hdr, box.end).find((k) => k.type === t);
+  const path = (b, box, ...ts) => { let cur = box; for (const t of ts) { cur = cur && find(b, cur, t); } return cur; };
+
+  // top level: find moov without loading the whole (possibly huge) file
+  async function readMoov(file) {
+    let o = 0;
+    let isMp4 = false;
+    while (o + 8 <= file.size) {
+      const h = new Uint8Array(await file.slice(o, o + 16).arrayBuffer());
+      let size = u32(h, 0), hdr = 8;
+      const t = typ(h, 4);
+      if (o === 0 && t !== "ftyp") throw new Error("not mp4");
+      if (t === "ftyp") isMp4 = true;
+      if (size === 1) { size = u32(h, 8) * 4294967296 + u32(h, 12); hdr = 16; }
+      else if (size === 0) size = file.size - o;
+      if (size < 8) throw new Error("bad box");
+      if (t === "moov") {
+        const b = new Uint8Array(await file.slice(o, o + size).arrayBuffer());
+        return { b, box: { type: "moov", start: 0, end: b.length, hdr } };
+      }
+      o += size;
+    }
+    throw new Error(isMp4 ? "no moov" : "not mp4");
+  }
+
+  function fullPayload(b, box) { return box.start + box.hdr + 4; }  // skip version/flags
+
+  function parseTrack(b, trak) {
+    const tkhd = find(b, trak, "tkhd"), mdia = find(b, trak, "mdia");
+    const mdhd = find(b, mdia, "mdhd"), hdlr = find(b, mdia, "hdlr");
+    const stbl = path(b, mdia, "minf", "stbl");
+    if (!tkhd || !mdhd || !hdlr || !stbl) return null;
+    const tv = b[tkhd.start + tkhd.hdr];
+    const mo = tkhd.start + tkhd.hdr + 4 + (tv === 1 ? 32 : 20) + 8 + 2 + 2 + 2 + 2;  // matrix offset
+    const matrix = [i32(b, mo), i32(b, mo + 4), i32(b, mo + 12), i32(b, mo + 16)];
+    const mv = b[mdhd.start + mdhd.hdr];
+    const timescale = u32(b, mdhd.start + mdhd.hdr + 4 + (mv === 1 ? 16 : 8));
+    const handler = typ(b, hdlr.start + hdlr.hdr + 8);
+    const stsd = find(b, stbl, "stsd");
+    const entry = kids(b, stsd.start + stsd.hdr + 8, stsd.end)[0];
+    // sample tables
+    const tbl = (t) => find(b, stbl, t);
+    const stsz = tbl("stsz"), stz2 = tbl("stz2"), stco = tbl("stco"), co64 = tbl("co64"), stsc = tbl("stsc"), stts = tbl("stts"), ctts = tbl("ctts"), stss = tbl("stss");
+    let sizes = [];
+    if (stsz) {
+      const p = fullPayload(b, stsz), fixed = u32(b, p), n = u32(b, p + 4);
+      sizes = fixed ? new Array(n).fill(fixed) : Array.from({ length: n }, (_, i) => u32(b, p + 8 + i * 4));
+    } else if (stz2) throw new Error("stz2");
+    const n = sizes.length;
+    if (!n) return null;
+    const chunkOffs = [];
+    if (stco) { const p = fullPayload(b, stco), c = u32(b, p); for (let i = 0; i < c; i++) chunkOffs.push(u32(b, p + 4 + i * 4)); }
+    else if (co64) { const p = fullPayload(b, co64), c = u32(b, p); for (let i = 0; i < c; i++) chunkOffs.push(u32(b, p + 4 + i * 8) * 4294967296 + u32(b, p + 8 + i * 8)); }
+    const sc = []; { const p = fullPayload(b, stsc), c = u32(b, p); for (let i = 0; i < c; i++) sc.push([u32(b, p + 4 + i * 12), u32(b, p + 8 + i * 12)]); }
+    const offsets = new Array(n);
+    let s = 0;
+    for (let ci = 0; ci < chunkOffs.length && s < n; ci++) {
+      let per = sc[0][1];
+      for (const [first, cnt] of sc) { if (ci + 1 >= first) per = cnt; else break; }
+      let off = chunkOffs[ci];
+      for (let k = 0; k < per && s < n; k++) { offsets[s] = off; off += sizes[s]; s++; }
+    }
+    const dts = new Array(n), durs = new Array(n);
+    { const p = fullPayload(b, stts), c = u32(b, p); let t = 0, i = 0;
+      for (let e = 0; e < c; e++) { const cnt = u32(b, p + 4 + e * 8), d = u32(b, p + 8 + e * 8); for (let k = 0; k < cnt && i < n; k++) { dts[i] = t; durs[i] = d; t += d; i++; } }
+      for (; i < n; i++) { dts[i] = t; durs[i] = durs[i - 1] || 0; } }
+    const cto = new Array(n).fill(0);
+    if (ctts) { const v = b[ctts.start + ctts.hdr], p = fullPayload(b, ctts), c = u32(b, p); let i = 0;
+      for (let e = 0; e < c; e++) { const cnt = u32(b, p + 4 + e * 8), off = v === 1 ? i32(b, p + 8 + e * 8) : u32(b, p + 8 + e * 8); for (let k = 0; k < cnt && i < n; k++) cto[i++] = off; } }
+    let sync = null;
+    if (stss) { sync = new Set(); const p = fullPayload(b, stss), c = u32(b, p); for (let i = 0; i < c; i++) sync.add(u32(b, p + 4 + i * 4) - 1); }
+    return { handler, timescale, matrix, stsd: b.slice(stsd.start, stsd.end), entry: entry && { type: entry.type, bytes: b.slice(entry.start, entry.end), hdr: entry.hdr },
+      n, sizes, offsets, dts, durs, cto, sync };
+  }
+
+  // codec string + decoder description from the video sample entry
+  function videoConfig(tr) {
+    const e = tr.entry, b = e.bytes, p = e.hdr;  // payload start
+    const width = u16(b, p + 24), height = u16(b, p + 26);
+    const children = kids(b, p + 78, b.length);
+    const hex = (x) => x.toString(16).padStart(2, "0");
+    if (e.type === "avc1" || e.type === "avc3") {
+      const c = children.find((k) => k.type === "avcC"); if (!c) throw new Error("no avcC");
+      const d = b.slice(c.start + c.hdr, c.end);
+      return { codec: e.type + "." + hex(d[1]) + hex(d[2]) + hex(d[3]), codedWidth: width, codedHeight: height, description: d };
+    }
+    if (e.type === "hvc1" || e.type === "hev1") {
+      const c = children.find((k) => k.type === "hvcC"); if (!c) throw new Error("no hvcC");
+      const d = b.slice(c.start + c.hdr, c.end);
+      const ps = d[1] >> 6, tier = (d[1] >> 5) & 1, prof = d[1] & 31;
+      let compat = u32(d, 2), rev = 0; for (let i = 0; i < 32; i++) { rev = (rev << 1) | (compat & 1); compat >>>= 1; }
+      const cons = Array.from(d.slice(6, 12)); while (cons.length && cons[cons.length - 1] === 0) cons.pop();
+      const codec = [e.type, ["", "A", "B", "C"][ps] + prof, (rev >>> 0).toString(16), (tier ? "H" : "L") + d[12], ...cons.map((x) => x.toString(16))].join(".");
+      return { codec, codedWidth: width, codedHeight: height, description: d };
+    }
+    if (e.type === "vp09") {
+      const c = children.find((k) => k.type === "vpcC"); if (!c) throw new Error("no vpcC");
+      const q = c.start + c.hdr + 4;
+      return { codec: `vp09.${hex(b[q])}.${hex(b[q + 1])}.${hex(b[q + 2] >> 4)}`, codedWidth: width, codedHeight: height };
+    }
+    throw new Error("codec " + e.type);
+  }
+
+  // reads sample bytes through a sliding 8 MB window (cheap on phones, never loads the whole file)
+  function reader(file) {
+    let wStart = 0, wBuf = new Uint8Array(0);
+    return async (off, size) => {
+      if (off >= wStart && off + size <= wStart + wBuf.length) return wBuf.subarray(off - wStart, off - wStart + size);
+      const len = Math.max(size, 8 << 20);
+      wBuf = new Uint8Array(await file.slice(off, Math.min(file.size, off + len)).arrayBuffer()); wStart = off;
+      if (wBuf.length < size) throw new Error("short read");
+      return wBuf.subarray(0, size);
+    };
+  }
+
+  /* ---------- MP4 writer ---------- */
+  const enc = new TextEncoder();
+  function box(type, ...parts) {
+    const body = parts.flat(Infinity).filter(Boolean);
+    let len = 8; for (const x of body) len += x.length;
+    const out = new Uint8Array(len), dv = new DataView(out.buffer);
+    dv.setUint32(0, len); out.set(enc.encode(type), 4);
+    let o = 8; for (const x of body) { out.set(x, o); o += x.length; }
+    return out;
+  }
+  const U8 = (...xs) => new Uint8Array(xs);
+  const U16 = (x) => U8((x >> 8) & 255, x & 255);
+  const U32 = (x) => U8((x >>> 24) & 255, (x >>> 16) & 255, (x >>> 8) & 255, x & 255);
+  const U64 = (x) => { const hi = Math.floor(x / 4294967296), lo = x >>> 0; return [U32(hi), U32(lo)]; };
+  const full = (type, v, flags, ...parts) => box(type, U8(v, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255), ...parts);
+  const MATRIX = [U32(0x10000), U32(0), U32(0), U32(0), U32(0x10000), U32(0), U32(0), U32(0), U32(0x40000000)];
+  const zeros = (n) => new Uint8Array(n);
+
+  function sampleTables(durs, sizes, offs, ctts, syncs) {
+    // stts run-length
+    const runs = []; for (const d of durs) { const r = runs[runs.length - 1]; if (r && r[1] === d) r[0]++; else runs.push([1, d]); }
+    const parts = [
+      full("stts", 0, 0, U32(runs.length), runs.map(([c, d]) => [U32(c), U32(d)])),
+      ctts && ctts.some((x) => x) ? full("ctts", 0, 0, U32(ctts.length), ctts.map((x) => [U32(1), U32(x)])) : null,
+      syncs ? full("stss", 0, 0, U32(syncs.length), syncs.map((i) => U32(i + 1))) : null,
+      full("stsc", 0, 0, U32(1), U32(1), U32(1), U32(1)),
+      full("stsz", 0, 0, U32(0), U32(sizes.length), sizes.map(U32)),
+      full("co64", 0, 0, U32(offs.length), offs.map(U64)),
+    ];
+    return parts;
+  }
+  function trak(id, opts) {
+    const { handler, timescale, duration, movieDur, width = 0, height = 0, stsd, tables } = opts;
+    const vide = handler === "vide";
+    const tkhd = full("tkhd", 1, 3, U64(0), U64(0), U32(id), U32(0), U64(movieDur), zeros(8), U16(0), U16(vide ? 0 : 1), U16(vide ? 0 : 0x100), U16(0), MATRIX, U32(width * 65536), U32(height * 65536));
+    const mdhd = full("mdhd", 1, 0, U64(0), U64(0), U32(timescale), U64(duration), U16(0x55c4), U16(0));
+    const hdlr = full("hdlr", 0, 0, U32(0), enc.encode(handler), zeros(12), enc.encode(vide ? "VideoHandler\0" : "SoundHandler\0"));
+    const head = vide ? full("vmhd", 0, 1, zeros(8)) : full("smhd", 0, 0, zeros(4));
+    const dinf = box("dinf", full("dref", 0, 0, U32(1), full("url ", 0, 1)));
+    return box("trak", tkhd, box("mdia", mdhd, hdlr, box("minf", head, dinf, box("stbl", stsd, ...tables))));
+  }
+  function avcEntry(w, h, avcC) {
+    return box("avc1", zeros(6), U16(1), zeros(16), U16(w), U16(h), U32(0x00480000), U32(0x00480000), U32(0), U16(1), zeros(32), U16(0x18), U16(0xffff), box("avcC", avcC));
+  }
+
+  /* ---------- the export itself ---------- */
+  async function run({ file, outW, outH, dispW, dispH, bitrate, drawOverlay, onProgress, cancelled }) {
+    if (!("VideoDecoder" in window && "VideoEncoder" in window && "VideoFrame" in window)) throw new Error("no webcodecs");
+    const { b, box: moov } = await readMoov(file);
+    const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
+    const vt = tracks.find((t) => t.handler === "vide"), at = tracks.find((t) => t.handler === "soun");
+    if (!vt) throw new Error("no video track");
+    const dcfg = videoConfig(vt);
+    if (!(await VideoDecoder.isConfigSupported(dcfg)).supported) throw new Error("can't decode " + dcfg.codec);
+    // rotation from the track matrix (phones store portrait video as rotated landscape)
+    const [ma, mb] = vt.matrix, rot = ((Math.round(Math.atan2(mb, ma) * 180 / Math.PI) % 360) + 360) % 360;
+    const vdurSec = (vt.dts[vt.n - 1] + vt.durs[vt.n - 1]) / vt.timescale;
+    const fps = Math.min(60, Math.max(15, Math.round(vt.n / Math.max(0.1, vdurSec))));
+    // pick an H.264 profile the phone can encode at this size
+    let ecfg = null;
+    for (const codec of ["avc1.640033", "avc1.64002a", "avc1.640028", "avc1.4d0033", "avc1.4d002a", "avc1.42e033"]) {
+      const c = { codec, width: outW, height: outH, bitrate, framerate: fps, avc: { format: "avc" }, latencyMode: "quality" };
+      try { if ((await VideoEncoder.isConfigSupported(c)).supported) { ecfg = c; break; } } catch {}
+    }
+    if (!ecfg) throw new Error("can't encode h264");
+
+    const cnv = document.createElement("canvas"); cnv.width = outW; cnv.height = outH;
+    const ctx = cnv.getContext("2d", { alpha: false });
+    const out = [];            // encoded video chunks {data, pts(us), key}
+    let avcC = null, encErr = null, decErr = null;
+    const encoder = new VideoEncoder({
+      output: (chunk, meta) => {
+        if (meta && meta.decoderConfig && meta.decoderConfig.description && !avcC) avcC = new Uint8Array(meta.decoderConfig.description instanceof ArrayBuffer ? meta.decoderConfig.description : meta.decoderConfig.description.buffer.slice(meta.decoderConfig.description.byteOffset, meta.decoderConfig.description.byteOffset + meta.decoderConfig.description.byteLength));
+        const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d);
+        out.push({ data: d, pts: chunk.timestamp, dur: chunk.duration || 0, key: chunk.type === "key" });
+      },
+      error: (e) => (encErr = e),
+    });
+    encoder.configure(ecfg);
+
+    // presentation times of all frames, so captions line up with what the video player shows
+    let minPts = Infinity; for (let i = 0; i < vt.n; i++) minPts = Math.min(minPts, vt.dts[i] + vt.cto[i]);
+    const ptsUs = (i) => Math.round((vt.dts[i] + vt.cto[i] - minPts) * 1e6 / vt.timescale);
+    const keyEvery = fps * 2;
+    let made = 0, thumb = null;
+    const t0 = performance.now();
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        try {
+          const t = frame.timestamp / 1e6;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          if (rot === 90) { ctx.translate(outW, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(frame, 0, 0, outH, outW); }
+          else if (rot === 270) { ctx.translate(0, outH); ctx.rotate(-Math.PI / 2); ctx.drawImage(frame, 0, 0, outH, outW); }
+          else if (rot === 180) { ctx.translate(outW, outH); ctx.rotate(Math.PI); ctx.drawImage(frame, 0, 0, outW, outH); }
+          else ctx.drawImage(frame, 0, 0, outW, outH);
+          ctx.setTransform(outW / dispW, 0, 0, outH / dispH, 0, 0);
+          drawOverlay(ctx, t);
+          if (!thumb && t >= Math.min(vdurSec * 0.3, 3)) { const c = document.createElement("canvas"); c.width = 180; c.height = Math.round(180 * outH / outW); c.getContext("2d").drawImage(cnv, 0, 0, c.width, c.height); thumb = c.toDataURL("image/jpeg", 0.72); }
+          const vf = new VideoFrame(cnv, { timestamp: frame.timestamp, duration: frame.duration || Math.round(1e6 / fps) });
+          encoder.encode(vf, { keyFrame: made % keyEvery === 0 });
+          vf.close(); made++;
+          if (made % 5 === 0) { const el2 = (performance.now() - t0) / 1000, done = Math.min(1, t / vdurSec); onProgress(done, done > 0.03 ? el2 / done - el2 : null); }
+        } catch (e) { decErr = e; }
+        finally { frame.close(); }
+      },
+      error: (e) => (decErr = e),
+    });
+    decoder.configure(dcfg);
+
+    const read = reader(file);
+    for (let i = 0; i < vt.n; i++) {
+      if (encErr || decErr) throw encErr || decErr;
+      if (cancelled && cancelled()) throw new Error("cancelled");
+      const data = await read(vt.offsets[i], vt.sizes[i]);
+      decoder.decode(new EncodedVideoChunk({ type: !vt.sync || vt.sync.has(i) ? "key" : "delta", timestamp: ptsUs(i), duration: Math.round(vt.durs[i] * 1e6 / vt.timescale), data }));
+      while (decoder.decodeQueueSize > 6 || encoder.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 2));
+    }
+    await decoder.flush(); await encoder.flush();
+    if (encErr || decErr) throw encErr || decErr;
+    decoder.close(); encoder.close();
+    if (!out.length || !avcC) throw new Error("encoder gave nothing");
+    onProgress(1, 0.5);
+
+    // ---- write the new MP4: ftyp, moov, mdat (video samples, then the original audio samples) ----
+    const VTS = 90000;
+    const sortedPts = out.map((c) => c.pts).sort((a, c) => a - c);
+    const vDts = sortedPts.map((p) => Math.round(p * VTS / 1e6));
+    const vPts = out.map((c) => Math.round(c.pts * VTS / 1e6));
+    const vDur = vDts.map((d, i) => (i + 1 < vDts.length ? vDts[i + 1] - d : Math.round(VTS / fps)));
+    const vCtts = vPts.map((p, i) => Math.max(0, p - vDts[i]));
+    const vSync = out.map((c, i) => (c.key ? i : -1)).filter((i) => i >= 0);
+    const vTotal = vDts[vDts.length - 1] + vDur[vDur.length - 1];
+    const movieMs = Math.round(vTotal * 1000 / VTS);
+
+    let aIdx = [];
+    if (at && at.entry) {
+      const aMin = at.dts[0], limit = (vTotal / VTS) * at.timescale + aMin;
+      for (let i = 0; i < at.n; i++) if (at.dts[i] < limit) aIdx.push(i);
+    }
+    const ftyp = box("ftyp", enc.encode("isom"), U32(0x200), enc.encode("isomiso2avc1mp41"));
+    const build = (mdatStart) => {
+      let off = mdatStart;
+      const vOffs = out.map((c) => { const o = off; off += c.data.length; return o; });
+      const aOffs = aIdx.map((i) => { const o = off; off += at.sizes[i]; return o; });
+      const vStsd = full("stsd", 0, 0, U32(1), avcEntry(outW, outH, avcC));
+      const traks = [trak(1, { handler: "vide", timescale: VTS, duration: vTotal, movieDur: movieMs, width: outW, height: outH, stsd: vStsd,
+        tables: sampleTables(vDur, out.map((c) => c.data.length), vOffs, vCtts, vSync) })];
+      if (aIdx.length) {
+        const aDur = aIdx.map((i) => at.durs[i]), aTotal = aDur.reduce((x, y) => x + y, 0);
+        traks.push(trak(2, { handler: "soun", timescale: at.timescale, duration: aTotal, movieDur: movieMs, stsd: at.stsd,
+          tables: sampleTables(aDur, aIdx.map((i) => at.sizes[i]), aOffs, null, null) }));
+      }
+      const mvhd = full("mvhd", 1, 0, U64(0), U64(0), U32(1000), U64(movieMs), U32(0x10000), U16(0x100), zeros(10), MATRIX, zeros(24), U32(traks.length + 1));
+      return box("moov", mvhd, ...traks);
+    };
+    // moov goes first ("fast start") so videos play straight away when shared; its size doesn't depend on offsets
+    let mdatBody = 0; out.forEach((c) => (mdatBody += c.data.length)); aIdx.forEach((i) => (mdatBody += at.sizes[i]));
+    const probe = build(0), mdatHdr = 16;
+    const moovOut = build(ftyp.length + probe.length + mdatHdr);
+    const mdatHead = new Uint8Array(16); const dv = new DataView(mdatHead.buffer);
+    dv.setUint32(0, 1); mdatHead.set(enc.encode("mdat"), 4); dv.setUint32(8, Math.floor((mdatBody + 16) / 4294967296)); dv.setUint32(12, (mdatBody + 16) >>> 0);
+    const parts = [ftyp, moovOut, mdatHead, ...out.map((c) => c.data)];
+    // audio: copy the original compressed sound straight across (no re-encoding, no quality loss)
+    const aread = reader(file);
+    for (const i of aIdx) parts.push((await aread(at.offsets[i], at.sizes[i])).slice());
+    return { blob: new Blob(parts, { type: "video/mp4" }), thumb, seconds: (performance.now() - t0) / 1000, codec: dcfg.codec, rot };
+  }
+  return { run };
+})();
+
 $("#exportBtn").onclick = async () => {
   if (!job || !words.length) return;
   if (isLocked(S.style)) return paywall(S.style);
@@ -2121,7 +2550,7 @@ $("#exportBtn").onclick = async () => {
   document.body.append(v);
   video.pause(); go("result");
   const D0 = (job && job.duration) || video.duration || 0;
-  resultProgress(0, `Exporting plays your video through once while adding the captions, so it takes about as long as the video (${secsText(D0)}).`, D0 + 3, "Step 1 of 2 · Getting ready");
+  resultProgress(0, "Getting your video ready…", null, "Step 1 of 2 · Getting ready");
   const SS = { ...S }, W = words.map((w) => ({ ...w }));
   try {
     keepAwake(true);
@@ -2131,12 +2560,36 @@ $("#exportBtn").onclick = async () => {
     const cnv = el("canvas"); cnv.width = ow; cnv.height = oh;
     const ctx = cnv.getContext("2d");
     const groups = groupWords(W, SS.words, SS.smart, INFO.gap);
+    const bitrate = BITRATE[APP.quality === "max" && !isPro() ? "high" : APP.quality] || 12e6;
+    const stem = (job.name || "video").replace(/\.[^.]+$/, "");
+    // 1) fast way: straight from the file, using the phone's video chip
+    if (currentFile && !/webm|matroska|mkv/i.test((currentFile.type || "") + currentFile.name)) {
+      try {
+        const fast = await FX.run({
+          file: currentFile, outW: ow, outH: oh, dispW: vw, dispH: vh, bitrate,
+          drawOverlay: (c, t) => { drawFrame(c, vw, vh, groups, t, SS); drawWatermark(c, vw, vh); },
+          onProgress: (done, left) => { if (view === "result") resultProgress(Math.min(0.97, done * 0.97), done >= 1 ? "Putting the finished video together…" : "Using your phone's video chip, so it's much faster than the video's length. Keep Cool Caps open.", left == null ? null : left + 1, done >= 1 ? "Step 2 of 2 · Saving your video" : "Step 1 of 2 · Adding your captions"); },
+          cancelled: () => view !== "result",
+        });
+        const item = { id: Date.now(), name: `${stem} - ${SS.style} ${SS.words}w.mp4`, mtime: Date.now() / 1000, size: fast.blob.size, type: "video/mp4", blob: fast.blob, thumb: fast.thumb };
+        if (!item.thumb) { const c = el("canvas"); c.width = 180; c.height = 320; item.thumb = c.toDataURL("image/jpeg", 0.5); }
+        console.info(`fast export: ${fast.seconds.toFixed(1)}s, ${fast.codec}, rotation ${fast.rot}`);
+        try { await LIB.put(item); } catch {}
+        showDone(item);
+        return;
+      } catch (err) {
+        if (view !== "result") throw new Error("Export stopped.");
+        console.warn("fast export not available, using real-time export:", err);
+        resultProgress(0, `This video needs the slower method: it plays through once while adding the captions, so it takes about as long as the video (${secsText(D0)}).`, D0 + 3, "Step 1 of 2 · Getting ready");
+      }
+    }
+    // 2) backup: play it through in real time and record it
     await new Promise((res, rej) => { if (v.readyState >= 2) res(); else { v.onloadeddata = res; v.onerror = () => rej(new Error("Couldn't read the video.")); } });
     const src = ac.createMediaElementSource(v), dest = ac.createMediaStreamDestination(); src.connect(dest);
     const stream = cnv.captureStream(30);
     dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     const mime = pickMime();
-    const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: BITRATE[APP.quality === "max" && !isPro() ? "high" : APP.quality] || 12e6, audioBitsPerSecond: 192000 });
+    const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: bitrate, audioBitsPerSecond: 192000 });
     const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const stopped = new Promise((r) => (rec.onstop = r));
     const dur = v.duration || job.duration;
@@ -2168,7 +2621,6 @@ $("#exportBtn").onclick = async () => {
     const type = (mime || "video/webm").split(";")[0], ext = type.includes("mp4") ? "mp4" : "webm";
     const blob = new Blob(chunks, { type });
     if (!blob.size) throw new Error("The recording came out empty. Keep Cool Caps open on screen while it exports, then try again.");
-    const stem = (job.name || "video").replace(/\.[^.]+$/, "");
     const item = { id: Date.now(), name: `${stem} - ${SS.style} ${SS.words}w.${ext}`, mtime: Date.now() / 1000, size: blob.size, type, blob, thumb: thumb || makeThumb() };
     try { await LIB.put(item); } catch {}
     showDone(item);
