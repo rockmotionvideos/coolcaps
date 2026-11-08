@@ -343,6 +343,7 @@ a.linkrow .chev { margin-left: auto; font-size: 26px; line-height: 1; color: var
 #wpsBox.off { opacity: .35; pointer-events: none; }
 .tw.spoil { background: repeating-linear-gradient(135deg, rgba(255,255,255,.14) 0 6px, rgba(255,255,255,.04) 6px 12px); border-style: dashed; }
 .tw.spoil::before { content: "🙈 "; }
+.bigselect { width: 100%; height: 52px; border-radius: 16px; padding: 0 14px; font: 700 17px var(--ui); background: var(--raised); color: inherit; border: 1px solid var(--line-2); }
 .sharecard { padding: 16px; border-radius: 20px; background: var(--raised); border: 1px solid var(--line-2); text-align: center; font-weight: 800; font-size: 20px; }
 .scard:active { transform: scale(.97); }
 .scard .demo { position: relative; height: 90px; }
@@ -1445,7 +1446,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.8 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.9 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -2015,7 +2016,7 @@ self.onmessage = async (e) => {
     }
     postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
     let lang = language;
-    if (!lang) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); postMessage({ type: "detected", lang }); }
+    if (!lang && !e.data.noDetect) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); postMessage({ type: "detected", lang }); }
     postMessage({ type: "stage" });
     // translate: Whisper writes English captions straight from the foreign speech (skipped if it's already English)
     const opts = { return_timestamps: "word", task: translate && lang !== "en" ? "translate" : "transcribe" };
@@ -2123,12 +2124,27 @@ function checkCrash() {
   let c = null; try { c = JSON.parse(localStorage.getItem(INFLIGHT) || "null"); } catch {}
   inflight(null);
   if (!c || Date.now() - (c.t || 0) > 45 * 60e3) return;
+  const nm = { base: "Fast", small: "Balanced", medium: "Best", max: "Max" };
+  if (c.stage === "detecting" && !store.get("coolcaps.noDetect")) {
+    // the model loaded fine; it was the language check that crashed. Skip it from now on.
+    store.set("coolcaps.noDetect", true);
+    openSheet((sh) => {
+      sh.append(el("span", "tag y", "Fixed it for you"), el("h3", "display", "Pick your video's language"));
+      sh.append(el("p", "sub", "Working out the language automatically uses too much memory on this phone, so Cool Caps will skip that step. Choose the language spoken in your videos, then add your video again."));
+      const sel = el("select", "bigselect"); LANGS.forEach(([v, l]) => { if (!v) return; const o = el("option", "", l); o.value = v; sel.append(o); }); sel.value = APP.lang || "en";
+      const ok = el("button", "btn primary block", "Save and add a video");
+      ok.onclick = () => { APP.lang = sel.value; saveApp(); $("#homeLang").value = APP.lang; $("#langSel").value = APP.lang; closeSheet(); $("#pick").click(); };
+      sh.append(sel, ok);
+    });
+    return;
+  }
   const order = ["base", "small", "medium", "max"], was = c.model || APP.model, i = order.indexOf(was);
   const lighter = i > 0 ? order[i - 1] : null;
   if (lighter) { APP.model = lighter; saveApp(); syncSettings(); }
-  const nm = { base: "Fast", small: "Balanced", medium: "Best", max: "Max" };
+  const where = { loading: "while loading the speech model", loaded: "right after loading the speech model", detecting: "while checking the language", transcribing: "while writing the captions" }[c.stage] || "";
   openSheet((sh) => {
     sh.append(el("span", "tag y", "Fixed it for you"), el("h3", "display", "Your phone ran out of memory"));
+    sh.append(el("p", "fine", `Step: ${where || c.stage || "?"} · ${nm[c.model] || c.model || "?"} · v${INFO ? INFO.version : "?"}`));
     sh.append(el("p", "sub", lighter
       ? `The speech model was too big for the memory your ${IS_IOS ? "iPhone gives Safari" : "browser has"}, so the page restarted. Cool Caps has switched Accuracy to ${nm[lighter]}, which uses much less memory. Add your video again.`
       : `Even the lightest speech model ran out of memory. Close other apps and browser tabs${IN_APP ? ", open Cool Caps in " + (IS_IOS ? "Safari" : "Chrome") + " instead of this app's browser" : ""}, or try a shorter video.`));
@@ -2169,7 +2185,7 @@ function transcribe(audio, onStatus) {
       else if (m.type === "detected" && !m.lang) { detectFailed = true; }
       else if (m.type === "detected") { detectedLang = m.lang; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
       else if (m.type === "warn") console.warn(m.message);
-      else if (m.type === "device") devKind = m.device, engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
+      else if (m.type === "device") inflight({ stage: "loaded" }), devKind = m.device, engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
       else if (m.type === "chunk") {
         // real progress: re-estimate the total time from how fast the finished pieces went
         const el2 = (performance.now() - tStage) / 1000;
@@ -2195,7 +2211,11 @@ function transcribe(audio, onStatus) {
     let mkey = translate && APP.model === "max" ? "medium" : APP.model;  // Max can't translate
     if (IS_IOS && (mkey === "medium" || mkey === "max")) mkey = "small";  // iPhones give web pages too little memory for the big models
     inflight({ model: mkey, stage: "loading", ios: IS_IOS });
-    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language: APP.lang || null, cpu: APP.engine !== "gpu", translate }, [audio.buffer]);
+    // phones where the language check crashed: skip it and use the language picked on the home screen (or English)
+    const noDetect = !!store.get("coolcaps.noDetect");
+    const language = APP.lang || (noDetect ? "en" : null);
+    if (noDetect && !APP.lang) detectFailed = true;
+    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language, cpu: APP.engine !== "gpu", translate, noDetect }, [audio.buffer]);
   });
 }
 let objectURL = null, token = 0, wakeLock = null;
