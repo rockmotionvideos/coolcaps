@@ -335,6 +335,14 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 .scard.mine b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 a.linkrow { color: inherit; text-decoration: none; }
 a.linkrow .chev { margin-left: auto; font-size: 26px; line-height: 1; color: var(--muted); padding-left: 10px; }
+.phead-dice { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.phead-dice > div { display: grid; }
+.dice { flex: none; white-space: nowrap; }
+@keyframes diceroll { 0% { transform: rotate(0) scale(1); } 40% { transform: rotate(-200deg) scale(1.15); } 100% { transform: rotate(-360deg) scale(1); } }
+.dice.roll { animation: diceroll .5s cubic-bezier(.3,1.4,.5,1); }
+#wpsBox.off { opacity: .35; pointer-events: none; }
+.tw.spoil { background: repeating-linear-gradient(135deg, rgba(255,255,255,.14) 0 6px, rgba(255,255,255,.04) 6px 12px); border-style: dashed; }
+.tw.spoil::before { content: "🙈 "; }
 .sharecard { padding: 16px; border-radius: 20px; background: var(--raised); border: 1px solid var(--line-2); text-align: center; font-weight: 800; font-size: 20px; }
 .scard:active { transform: scale(.97); }
 .scard .demo { position: relative; height: 90px; }
@@ -626,7 +634,7 @@ body.is-pro .probadge { display: none; }
         <div class="seg subtabs" id="subTabs" hidden></div>
 
         <div class="tpane" data-pane="style">
-          <div class="phead"><b>Pick a style</b><span>Swipe sideways, tap to try. Change the lettering in Text.</span></div>
+          <div class="phead phead-dice"><div><b>Pick a style</b><span>Swipe sideways, tap to try. Change the lettering in Text.</span></div><button class="btn primary small dice" id="diceBtn" aria-label="Surprise me: random style">🎲 Surprise me</button></div>
           <div class="sec-label"><span class="label">My styles</span><span class="tag y">Yours</span></div>
           <div class="sgrid strip" id="myStyles" style="margin:8px 0 14px"></div>
           <div id="styleSections"></div>
@@ -684,7 +692,14 @@ body.is-pro .probadge { display: none; }
             </div>
           </div>
           <div class="grp">
-            <div class="grp-title">Emojis <span class="tag p">New</span></div>
+            <div class="grp-title">Voice effects <span class="tag p">New</span></div>
+            <div class="inline-row"><div><b>Loud mode</b><span>Louder words get bigger and shake, quiet ones shrink</span></div><button class="switch" id="loudSw" role="switch" aria-label="Loud mode"></button></div>
+            <div class="inline-row"><div><b>Two-voice colours</b><span id="voicesNote">Colours a second speaker differently</span></div><button class="switch" id="voicesSw" role="switch" aria-label="Two-voice colours"></button></div>
+            <div id="v2More"><span class="label">Second voice colour</span><div class="swrow" id="v2Sw"></div></div>
+            <div class="inline-row"><div><b>Emoji bursts</b><span>Words like money, fire and love burst into emojis</span></div><button class="switch" id="burstSw" role="switch" aria-label="Emoji bursts"></button></div>
+          </div>
+          <div class="grp">
+            <div class="grp-title">Emojis</div>
             <div class="inline-row"><div><b>Auto emojis</b><span>Adds a matching emoji to key words</span></div><button class="switch" id="emojiSw" role="switch" aria-label="Auto emojis"></button></div>
             <div class="seg" id="esSeg"><button data-v="s">Small</button><button data-v="m">Medium</button><button data-v="l">Large</button></div>
             <span class="label" style="text-transform:none;letter-spacing:0;font-weight:500">Change or remove an emoji in the Transcript tab.</span>
@@ -693,11 +708,12 @@ body.is-pro .probadge { display: none; }
 
         <div class="tpane" data-pane="words" hidden>
           <div class="phead"><b>Words on screen</b><span>How many words show at once.</span></div>
-          <div class="grp">
+          <div class="grp" id="wpsBox">
             <div class="wps"><button class="round" id="wpsMinus" aria-label="Fewer words">&minus;</button><div class="wps-num display" id="wpsNum">3</div><button class="round" id="wpsPlus" aria-label="More words">+</button></div>
             <div class="chips" id="wpsChips"></div>
             <p class="hint" id="wpsHint"></p>
           </div>
+          <div class="grp"><div class="inline-row"><div><b>Smart pace ✨</b><span>Fewer words when you talk fast, more when you slow down</span></div><button class="switch" id="paceSw" role="switch" aria-label="Smart pace"></button></div></div>
           <div class="grp"><div class="inline-row"><div><b>Smart breaks</b><span>Start a new screen at the end of a sentence</span></div><button class="switch" id="smartSw" role="switch" aria-label="Smart breaks"></button></div></div>
         </div>
 
@@ -784,10 +800,27 @@ function splitLongWords(words) {
   }
   return out;
 }
-function groupWords(words, per, smart, gap) {
-  const ws = words.map((w) => ({ ...w })), groups = []; let cur = [];
+const SPOIL = "\u2588";
+const loudK = (w) => 0.8 + 0.55 * (w.loud == null ? 0.5 : w.loud);  // whisper 0.8×, normal ~1.08×, shout 1.35×
+// Smart pace: how many words fit the talking speed right here (fast talk → fewer words per screen)
+function paceSize(ws, i) {
+  const t0 = ws[i].start; let n = 0;
+  for (let k = i; k < ws.length && ws[k].start < t0 + 2; k++) n++;
+  const span = Math.max(0.6, Math.min(2, (ws[Math.min(ws.length - 1, i + n - 1)].end || t0 + 2) - t0)), rate = n / span;
+  return rate >= 3.6 ? 1 : rate >= 2.8 ? 2 : rate >= 2.1 ? 3 : rate >= 1.5 ? 4 : 5;
+}
+function groupWords(words, per, smart, gap, opt) {
+  const ws = words.map((w) => {
+    const c = { ...w };
+    if (c.spoiler) { c._real = c.word; c.word = SPOIL.repeat(clamp([...c.word].length, 3, 7)); }  // hidden until the reveal
+    return c;
+  }), groups = []; let cur = [], want = per;
+  const pace = opt && opt.pace;
   for (let i = 0; i < ws.length; i++) {
-    const w = ws[i], nxt = ws[i + 1]; cur.push(w); let brk = false;
+    const w = ws[i], nxt = ws[i + 1];
+    if (pace && !cur.length) want = paceSize(ws, i);
+    per = pace ? want : per;
+    cur.push(w); let brk = false;
     if (smart && nxt) {
       if (SENTENCE_END.test(w.word)) brk = true;
       else if (nxt.start - w.end > gap) brk = true;
@@ -796,6 +829,16 @@ function groupWords(words, per, smart, gap) {
     if (cur.length >= per || brk || !nxt) { groups.push(cur); cur = []; }
   }
   for (let a = 0; a < groups.length - 1; a++) { const A = groups[a], B = groups[a + 1]; if (B[0].start - A[A.length - 1].end < gap) A[A.length - 1].end = B[0].start; }
+  // spoilers: one big reveal near the end of the video
+  const sp = ws.filter((w) => w._real);
+  if (sp.length && ws.length) {
+    let dur = 0; try { dur = (job && job.duration) || 0; } catch {}
+    const lastEnd = ws[ws.length - 1].end, lastSp = sp[sp.length - 1].end;
+    let t0 = lastEnd + 0.35; if (dur && dur - 2.4 < t0) t0 = dur - 2.4;
+    groups.reveal = { t0: Math.max(t0, lastSp + 0.25), words: sp.map((w) => w._real) };
+  }
+  // emoji bursts on key words
+  groups.bursts = opt && opt.bursts ? ws.filter((w) => !w._real && w.emoji !== "").map((w) => ({ t: w.start, e: w.emoji || autoEmoji(w.word), seed: Math.round(w.start * 1000) })).filter((b) => b.e) : [];
   return groups;
 }
 function findGroup(groups, t) {
@@ -956,7 +999,15 @@ function baseSize(vw, vh, s) { return s.size || Math.round(Math.min(vh * 0.05, v
 function basePx(vw, vh, s) { const ratio = FONT[s.font] ? FONT[s.font].ratio : 0.85; return baseSize(vw, vh, s) * ratio * (KIN[s.style] ? 1.3 : 1); }
 
 /* text with outline, shadow and glow. fill may be a colour or a gradient. */
+function spoilerBar(ctx, s, text, x, y, px, fill) {
+  const w = ctx.measureText(text).width, h = px * 0.74;
+  ctx.save(); ctx.fillStyle = s.outline !== "none" ? s.outline_color : "rgba(0,0,0,.6)"; rrect(ctx, x - w / 2 - px * 0.05, y - h / 2 - px * 0.05, w + px * 0.1, h + px * 0.1, px * 0.16); ctx.fill();
+  ctx.fillStyle = typeof fill === "string" ? fill : s.color; rrect(ctx, x - w / 2, y - h / 2, w, h, px * 0.12); ctx.fill();
+  ctx.globalAlpha *= 0.35; ctx.fillStyle = "#000"; for (let k = 0; k < 4; k++) { const sx = x - w / 2 + (w * (k + 0.5)) / 4; ctx.fillRect(sx - px * 0.02, y - h / 2 + px * 0.08, px * 0.04, h - px * 0.16); }
+  ctx.restore();
+}
 function textFX(ctx, s, text, x, y, px, fill, o = {}) {
+  if (text.charCodeAt(0) === 0x2588 && /^\u2588+$/.test(text)) return spoilerBar(ctx, s, text, x, y, px, fill);
   const ol = o.noOutline ? 0 : px * (OUTLINE[s.outline] ?? 0.07), ds = devScale(ctx);
   ctx.lineJoin = "round"; ctx.miterLimit = 2;
   const paint = () => { if (ol > 0) { ctx.lineWidth = ol * 2; ctx.strokeStyle = s.outline_color; ctx.strokeText(text, x, y); } ctx.fillStyle = fill; ctx.fillText(text, x, y); };
@@ -971,9 +1022,10 @@ function textFX(ctx, s, text, x, y, px, fill, o = {}) {
 
 function layoutBlock(ctx, s, vw, g, px) {
   ctx.font = kFont(s, px);
-  const extra = { bubble: 0.3, jelly: 0.22, hollow: 0.08, shine: 0.06 }[s.style] || 0;
+  const extra = ({ bubble: 0.3, jelly: 0.22, hollow: 0.08, shine: 0.06 }[s.style] || 0) + (s.loud ? 0.08 : 0);
   const space = isNoSpace(g) ? px * extra : ctx.measureText(" ").width + px * extra, maxW = vw * s.maxw, rtl = isRTL(g);
-  const items = g.map((w, j) => { const text = up(s, w.word); return { w, j, text, width: ctx.measureText(text).width }; });
+  // Loud mode: lay each word out at the size it'll be drawn, so big words never crash into their neighbours
+  const items = g.map((w, j) => { const text = up(s, w.word), k = s.loud ? loudK(w) : 1; return { w, j, text, k, width: ctx.measureText(text).width * k }; });
   const lines = []; let cur = [], cw = 0;
   for (const it of items) {
     const add = (cur.length ? space : 0) + it.width;
@@ -1015,12 +1067,57 @@ function drawEmoji(ctx, s, g, t, cx, top, bottom, px, vh) {
 const popScale = (dt) => (dt < 90 ? lerp(0.7, 1.12, dt / 90) : dt < 170 ? lerp(1.12, 1, (dt - 90) / 80) : 1);
 
 function drawFrame(ctx, vw, vh, groups, t, s) {
+  const box = drawCaptions(ctx, vw, vh, groups, t, s);
+  if (groups.bursts && groups.bursts.length) drawBursts(ctx, groups.bursts, t, vw, vh, box, s);
+  if (groups.reveal) drawReveal(ctx, groups.reveal, t, vw, vh, s);
+  return box;
+}
+// emoji bursts: each key word sprays its emoji upward. Worked out from time alone, so the export matches the preview.
+function drawBursts(ctx, list, t, vw, vh, box, s) {
+  const px = basePx(vw, vh, s);
+  for (const b of list) {
+    const d = t - b.t; if (d < 0 || d > 1.5) continue;
+    const ox = box ? (box.x0 + box.x1) / 2 : s.x * vw, oy = box ? box.y0 : s.y * vh;
+    ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for (let i = 0; i < 9; i++) {
+      const h1 = hash(b.seed + i * 13.1), h2 = hash(b.seed * 0.37 + i * 7.7), h3 = hash(b.seed * 0.11 + i * 3.3);
+      const ang = -Math.PI / 2 + (h1 - 0.5) * 2.3, sp = vh * (0.55 + h2 * 0.55), g = vh * 1.5;
+      const x = ox + Math.cos(ang) * sp * d * 0.55, y = oy + Math.sin(ang) * sp * d + 0.5 * g * d * d;
+      const size = px * (0.6 + h3 * 0.7) * easeOutBack(d / 0.18, 2.2);
+      ctx.globalAlpha = 1 - clamp01((d - 0.85) / 0.6);
+      ctx.font = `${Math.max(1, size)}px ${EMOJI_FONT}`;
+      ctx.save(); ctx.translate(x, y); ctx.rotate((h1 - 0.5) * 1.2 + d * (h2 - 0.5) * 3); ctx.fillText(b.e, 0, 0); ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+// spoilers: the hidden words come back in a big pop near the end
+function drawReveal(ctx, r, t, vw, vh, s) {
+  const d = t - r.t0; if (d < 0 || d > 2.8) return;
+  const fade = 1 - clamp01((d - 2.35) / 0.45), px = basePx(vw, vh, s);
+  ctx.save();
+  ctx.globalAlpha = 0.5 * fade * clamp01(d / 0.2); ctx.fillStyle = "#000"; ctx.fillRect(0, 0, vw, vh);
+  if (d < 0.18) { ctx.globalAlpha = 0.55 * (1 - d / 0.18); ctx.fillStyle = "#FFF"; ctx.fillRect(0, 0, vw, vh); }
+  ctx.globalAlpha = fade; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const text = r.words.map((w) => up(s, w)).join(" ");
+  ctx.font = kFont(s, 100); const w100 = ctx.measureText(text).width / 100;
+  const big = Math.min(px * 2.4, (vw * 0.86) / Math.max(0.1, w100));
+  const cx = vw / 2, cy = vh * clamp(s.y, 0.3, 0.7);
+  const lab = Math.max(14, px * 0.55);
+  ctx.font = kFont(s, lab); textFX(ctx, s, s.upper ? "THE REVEAL 👀" : "The reveal 👀", cx, cy - big * 0.95, lab, s.color);
+  const p = easeOutBack(d / 0.4, 2.6);
+  ctx.translate(cx, cy); ctx.rotate((1 - clamp01(d / 0.4)) * -0.12); ctx.scale(0.3 + 0.7 * p, 0.3 + 0.7 * p);
+  ctx.font = kFont(s, big); textFX(ctx, s, text, 0, 0, big, s.highlight, { glow: true, glowColor: s.highlight });
+  ctx.restore();
+}
+function drawCaptions(ctx, vw, vh, groups, t, s) {
   const gi = findGroup(groups, t);
   if (gi < 0) return null;
   const g = groups[gi], gs = g[0].start, ge = g[g.length - 1].end, dtg = (t - gs) * 1000;
   let ai = 0; for (let j = 0; j < g.length; j++) if (g[j].start <= t) ai = j;
   const px = basePx(vw, vh, s), st = s.style;
-  const col = (j) => (j === ai && !NO_HL.has(st) ? s.highlight : s.color);
+  const base = (j) => (s.voices && g[j] && g[j].voice === 1 ? s.voice2 || "#7CF2D4" : s.color);
+  const col = (j) => (j === ai && !NO_HL.has(st) ? s.highlight : base(j));
   const exitK = (dur) => (ge - t < dur ? 1 - (ge - t) / dur : 0);
   let box = null;
   ctx.save(); ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1055,7 +1152,7 @@ function drawFrame(ctx, vw, vh, groups, t, s) {
       l.items.forEach((it, k) => {
         let wx = x + widths[k] / 2; x += widths[k] + sp; if (rtl) wx = -wx;
         const d = t - it.w.start; if (d < 0) return;
-        const sc = 1.6 + (1 - 1.6) * easeOutBack(d / 0.24, 2.4);
+        const sc = (1.6 + (1 - 1.6) * easeOutBack(d / 0.24, 2.4)) * (s.loud ? loudK(it.w) : 1);
         ctx.save(); ctx.globalAlpha *= clamp01(d / 0.05); ctx.translate(wx, ly); ctx.scale(sc, sc);
         textFX(ctx, s, it.text, 0, 0, l.px, col(it.j)); ctx.restore();
       });
@@ -1214,7 +1311,13 @@ function drawFrame(ctx, vw, vh, groups, t, s) {
         if (st === "gradient") {  // gradient is in block coordinates
           ctx.save(); ctx.globalAlpha *= alpha; textFX(ctx, s, it.text, it.x, it.y + dy, px, fill, o); ctx.restore(); return;
         }
-        ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(it.x, it.y + dy); if (rot) ctx.rotate(rot); if (sc !== 1) ctx.scale(sc, sc);
+        let dx = 0;
+        if (s.loud) {  // louder words get bigger (and shake while they're said); quiet ones shrink
+          const L = it.w.loud == null ? 0.5 : it.w.loud;
+          sc *= it.k || loudK(it.w);
+          if (L > 0.72 && d >= 0 && d < 0.6) { const a = px * 0.07 * ((L - 0.72) / 0.28) * (1 - d / 0.6); dx = a * Math.sin(t * 83 + j); dy += a * Math.cos(t * 71 + j * 2); }
+        }
+        ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(it.x + dx, it.y + dy); if (rot) ctx.rotate(rot); if (sc !== 1) ctx.scale(sc, sc);
         textFX(ctx, s, it.text, 0, 0, px, fill, o); ctx.restore();
         ctx.filter = "none";
       });
@@ -1231,7 +1334,7 @@ function drawFrame(ctx, vw, vh, groups, t, s) {
 
 class Captioner {
   constructor(layer) { this.layer = layer; this.canvas = el("canvas"); layer.append(this.canvas); this.groups = []; this.bbox = null; }
-  set(words, s, vw, vh) { this.words = words; this.s = s; this.vw = vw || 1080; this.vh = vh || 1920; this.groups = groupWords(words, s.words, s.smart, INFO.gap); }
+  set(words, s, vw, vh) { this.words = words; this.s = s; this.vw = vw || 1080; this.vh = vh || 1920; this.groups = groupWords(words, s.words, s.smart, INFO.gap, s); }
   render(t) {
     if (!this.s) return;
     const c = this.canvas, W = this.layer.clientWidth, H = this.layer.clientHeight;
@@ -1252,6 +1355,7 @@ const DEFAULTS = {
   position: "middle", x: 0.5, y: 0.5, line: 1, maxw: 0.9,
   outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off", bg_color: "#000000", bg_alpha: 0.35,
   emoji: true, emoji_size: "m", scale: 1,
+  pace: false, loud: false, bursts: false, voices: false, voice2: "#7CF2D4",
 };
 const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
 const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
@@ -1341,7 +1445,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.4 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.5 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1373,8 +1477,24 @@ function refreshAll(regroup) {
   if (hero) hero.cap.set(hero.words, heroSettings(), 1080, 1350);
 }
 function setS(patch) {
-  const regroup = "words" in patch || "smart" in patch || "emoji" in patch;
+  const regroup = "words" in patch || "smart" in patch || "emoji" in patch || "pace" in patch;
   Object.assign(S, patch); persist(); syncControls(); refreshAll(regroup);
+}
+
+/* ===================== surprise me ===================== */
+const DICE_COLOURS = ["#FFE600", "#FF2D95", "#00E5FF", "#7CF2D4", "#FF8A3D", "#8A7CFF", "#B6FF3B", "#FF4D4D", "#FFFFFF"];
+function surpriseMe() {
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const styles = Object.keys(ALL_STYLES).filter((k) => !isLocked(k) && k !== S.style);
+  const style = pick(styles), look = lookFor(style);
+  const fonts = Object.keys(FONT), hl = pick(DICE_COLOURS.filter((c) => c !== "#FFFFFF"));
+  const next = { ...look, style, highlight: hl, font: Math.random() < 0.6 ? look.font : pick(fonts),
+    color: Math.random() < 0.75 ? "#FFFFFF" : pick(DICE_COLOURS.filter((c) => c !== hl)),
+    glow: Math.random() < 0.25, upper: Math.random() < 0.7,
+    words: S.pace ? S.words : pick([1, 2, 2, 3, 3, 3, 4]), emoji_size: S.emoji_size };
+  setS(next);
+  const b = $("#diceBtn"); b.classList.remove("roll"); void b.offsetWidth; b.classList.add("roll"); buzz([8, 30, 12]);
+  toast(`🎲 ${style[0].toUpperCase() + style.slice(1)}${next.font && FONT[next.font] ? " · " + FONT[next.font].label : ""}. Like it? Save it under My styles`);
 }
 
 /* ===================== my styles: save, name and share your look ===================== */
@@ -1761,6 +1881,15 @@ function buildEditorControls() {
   $$("#esSeg button").forEach((b) => (b.onclick = () => setS({ emoji_size: b.dataset.v })));
   for (let n = 1; n <= 6; n++) { const b = el("button", "", String(n)); b.dataset.n = n; b.onclick = () => setS({ words: n }); $("#wpsChips").append(b); }
   $("#smartSw").onclick = () => setS({ smart: !S.smart });
+  $("#paceSw").onclick = () => { setS({ pace: !S.pace }); toast(S.pace ? "Smart pace on: words per screen now follow how fast you talk" : "Smart pace off"); };
+  $("#loudSw").onclick = () => { setS({ loud: !S.loud }); if (S.loud && words.length && words.every((w) => w.loud == null)) toast("Add the video again to measure how loud each word is", true); };
+  $("#voicesSw").onclick = () => {
+    setS({ voices: !S.voices });
+    if (S.voices && job) toast(job.voices === 2 ? "Two voices found. The second one is coloured" : "Only one voice found in this video, so nothing changes", job.voices !== 2);
+  };
+  $("#burstSw").onclick = () => setS({ bursts: !S.bursts });
+  swatches($("#v2Sw"), "voice2");
+  $("#diceBtn").onclick = () => surpriseMe();
   $("#wpsMinus").onclick = () => setS({ words: Math.max(1, S.words - 1) });
   $("#wpsPlus").onclick = () => setS({ words: Math.min(10, S.words + 1) });
   setTool("style"); syncControls();
@@ -1785,15 +1914,18 @@ function syncControls() {
   $$("#bgSeg .opt").forEach((b) => pressed(b, b.dataset.v === S.bg));
   $("#bgMore").hidden = S.bg === "off";
   const isPreset = (c) => Object.values(INFO.colors).some((h) => h.toUpperCase() === String(c).toUpperCase());
-  [["#colorSw", "color"], ["#hlSw", "highlight"], ["#olSw", "outline_color"], ["#bgSw", "bg_color"]].forEach(([id, prop]) => {
+  [["#colorSw", "color"], ["#hlSw", "highlight"], ["#olSw", "outline_color"], ["#bgSw", "bg_color"], ["#v2Sw", "voice2"]].forEach(([id, prop]) => {
     $$(id + " .sw[data-hex]").forEach((b) => pressed(b, b.dataset.hex === String(S[prop]).toUpperCase())); pressed($(id + " .custom"), !isPreset(S[prop]));
   });
   const hl = !NO_HL.has(S.style);
   $("#hlSw").style.opacity = hl ? "" : ".35"; $("#hlLabel").textContent = hl ? "Highlight (the word being said)" : "Highlight (not used by this animation)";
   $("#capsSw").setAttribute("aria-checked", S.upper); $("#smartSw").setAttribute("aria-checked", S.smart);
   $("#glowSw").setAttribute("aria-checked", S.glow); $("#emojiSw").setAttribute("aria-checked", S.emoji);
+  $("#paceSw").setAttribute("aria-checked", !!S.pace); $("#loudSw").setAttribute("aria-checked", !!S.loud);
+  $("#voicesSw").setAttribute("aria-checked", !!S.voices); $("#burstSw").setAttribute("aria-checked", !!S.bursts);
+  $("#v2More").hidden = !S.voices; $("#wpsBox").classList.toggle("off", !!S.pace);
   $$("#esSeg button").forEach((b) => pressed(b, b.dataset.v === S.emoji_size));
-  $("#wpsNum").textContent = S.words; $("#wpsHint").textContent = WPS_HINT[Math.min(S.words, 5)];
+  $("#wpsNum").textContent = S.words; $("#wpsHint").textContent = S.pace ? "Smart pace is on, so this changes by itself as you talk." : WPS_HINT[Math.min(S.words, 5)];
   $$("#wpsChips button").forEach((b) => pressed(b, +b.dataset.n === S.words));
   rangeSyncs.forEach((f) => f());
   $$(".preset").forEach((b, n) => { const p = presetS(PRESETS[n]); pressed(b, p.style === S.style && p.words === S.words && p.font === S.font && p.color === String(S.color).toUpperCase()); });
@@ -2045,13 +2177,56 @@ async function startFile(file) {
   if (my !== token) return;
   const meta = { id: Date.now().toString(36), name: file.name, duration: video.duration || audio.length / 16000, width: video.videoWidth || 1080, height: video.videoHeight || 1920 };
   let ws;
+  const keep = audio.slice();  // the original goes to the speech engine; this copy measures loudness and voices
   try { ws = await transcribe(audio, (st) => { if (my === token) setWorking(true, st); }); }
   catch (e) { if (my === token) setWorking(true, { stage: "Couldn't transcribe", note: e.message, error: true }); keepAwake(false); return; }
   keepAwake(false);
   if (my !== token) return;
   ws = (ws || []).filter((w) => String(w.word).trim());
   if (!ws.length) return setWorking(true, { stage: "No words found", note: "Couldn't hear any speech in this video.", error: true });
+  try { meta.voices = analyzeVoice(keep, ws); } catch (e) { console.warn("voice analysis failed", e); }
   onTranscribed({ ...meta, words: ws });
+}
+// Loud mode + two voices: measure each word's loudness and pitch from the audio (on the phone, takes a moment)
+function pitchAt(a, c, N) {
+  if (c < 0 || c + N + 240 > a.length) return 0;
+  let r0 = 0; for (let k = 0; k < N; k++) r0 += a[c + k] * a[c + k];
+  if (r0 < 1e-4) return 0;
+  let best = 0, bestLag = 0; const vals = [];
+  for (let lag = 40; lag <= 229; lag++) {  // 70–400 Hz at 16 kHz
+    let r = 0; for (let k = 0; k < N; k++) r += a[c + k] * a[c + k + lag];
+    const v = r / r0; vals.push(v); if (v > best) { best = v; bestLag = lag; }
+  }
+  if (best < 0.45) return 0;
+  for (let i = 1; i < vals.length - 1; i++) if (vals[i] > 0.9 * best && vals[i] >= vals[i - 1] && vals[i] >= vals[i + 1]) { bestLag = i + 40; break; }  // avoid octave mistakes
+  return 16000 / bestLag;
+}
+function analyzeVoice(a, ws) {
+  const SR = 16000, info = ws.map((w) => {
+    const s0 = Math.max(0, Math.floor(w.start * SR)), s1 = Math.min(a.length, Math.max(s0 + 400, Math.floor(w.end * SR)));
+    let e = 0; for (let k = s0; k < s1; k++) e += a[k] * a[k];
+    const db = 10 * Math.log10(e / Math.max(1, s1 - s0) + 1e-9);
+    const f = [0.3, 0.5, 0.7].map((fr) => pitchAt(a, Math.floor(s0 + (s1 - s0) * fr) - 256, 512)).filter((x) => x > 0).sort((x, y) => x - y);
+    return { db, f0: f.length ? f[f.length >> 1] : 0 };
+  });
+  // loudness 0..1 compared with a typical word in this video: 0.5 = normal, about +8 dB = 1 (shouting), -8 dB = 0 (whisper)
+  const dbs = info.map((x) => x.db).sort((x, y) => x - y), med = dbs[dbs.length >> 1];
+  ws.forEach((w, i) => { w.loud = Math.round(clamp01(0.5 + (info[i].db - med) / 16) * 100) / 100; });
+  // two voices: split the pitches into a lower and a higher group, only if they're clearly different
+  const lp = info.map((x) => (x.f0 ? Math.log(x.f0) : null)), voiced = lp.filter((x) => x != null).sort((x, y) => x - y);
+  if (voiced.length < 12) return 1;
+  let c1 = voiced[Math.floor(voiced.length * 0.2)], c2 = voiced[Math.floor(voiced.length * 0.8)];
+  for (let it = 0; it < 12; it++) {
+    let s1 = 0, n1 = 0, s2 = 0, n2 = 0;
+    for (const v of voiced) { if (Math.abs(v - c1) <= Math.abs(v - c2)) { s1 += v; n1++; } else { s2 += v; n2++; } }
+    if (n1) c1 = s1 / n1; if (n2) c2 = s2 / n2;
+  }
+  const n2 = voiced.filter((v) => Math.abs(v - c2) < Math.abs(v - c1)).length;
+  if (Math.exp(c2 - c1) < 1.3 || n2 < voiced.length * 0.12 || n2 > voiced.length * 0.88) { ws.forEach((w) => delete w.voice); return 1; }
+  const raw = lp.map((v) => (v == null ? null : Math.abs(v - c2) < Math.abs(v - c1) ? 1 : 0));
+  // smooth: people talk in runs, so take the majority of nearby words
+  ws.forEach((w, i) => { let a1 = 0, a0 = 0; for (let k = Math.max(0, i - 3); k <= Math.min(ws.length - 1, i + 3); k++) { if (raw[k] === 1) a1++; else if (raw[k] === 0) a0++; } w.voice = a1 > a0 ? 1 : 0; });
+  return 2;
 }
 let currentFile = null;
 function onTranscribed(j) {
@@ -2146,7 +2321,7 @@ function buildTranscript() {
     play.onclick = () => { if (!video.duration) return; video.currentTime = gs; video.play().catch(() => {}); playUntil = ge; };
     const box = el("div", "sw2"); box.append(el("span", "st", fmt(gs)));
     const ws = el("div", "ws");
-    g.forEach(() => { const i = idx++, w = words[i]; const b = el("button", "tw" + (w.edited ? " edited" : ""), w.word); b.dataset.i = i; b.onclick = () => editWord(i); ws.append(b); });
+    g.forEach(() => { const i = idx++, w = words[i]; const b = el("button", "tw" + (w.edited ? " edited" : "") + (w.spoiler ? " spoil" : ""), w.word); b.dataset.i = i; b.onclick = () => editWord(i); ws.append(b); });
     const to = idx - 1;
     const pick = groupEmoji(g, S);
     const em = el("button", "em" + (pick ? " has" : ""), pick ? pick.e : "+"); em.title = "Emoji for this screen"; em.setAttribute("aria-label", "Change emoji");
@@ -2205,6 +2380,9 @@ function editWord(i, adding = false) {
     sh.append(inp);
     const row = el("div", "btnrow");
     if (!adding) {
+      const spl = el("button", "btn ghost block", w.spoiler ? "👀 Show this word again" : "🙈 Hide as a spoiler");
+      spl.onclick = () => { snapshot(); words[i] = { ...words[i], spoiler: !w.spoiler }; if (!words[i].spoiler) delete words[i].spoiler; closeSheet(); refreshAll(true); toast(words[i].spoiler ? "Hidden. It'll be revealed in a big pop at the end" : "Word shown again"); };
+      sh.append(spl);
       const d = el("button", "btn danger", "Delete"); d.onclick = del;
       const a = el("button", "btn ghost", "Add after"); a.onclick = () => editWord(i, true);
       row.append(d, a);
@@ -2734,7 +2912,7 @@ $("#exportBtn").onclick = async () => {
     try { const f = FONT[SS.font]; await document.fonts.load(`${f ? f.w : 400} 60px "${f ? f.css : "Impact"}"`); } catch {}
     const cnv = el("canvas"); cnv.width = ow; cnv.height = oh;
     const ctx = cnv.getContext("2d");
-    const groups = groupWords(W, SS.words, SS.smart, INFO.gap);
+    const groups = groupWords(W, SS.words, SS.smart, INFO.gap, SS);
     const bitrate = BITRATE[APP.quality === "max" && !isPro() ? "high" : APP.quality] || 12e6;
     const stem = (job.name || "video").replace(/\.[^.]+$/, "");
     // 1) fast way: straight from the file, using the phone's video chip
