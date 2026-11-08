@@ -1320,7 +1320,7 @@ const CAPTION_FONTS = [
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.1 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.2 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1897,6 +1897,15 @@ function getWorker() {
   return asrWorker;
 }
 async function decodeAudio(file) {
+  let first = null;
+  if (!/webm|matroska|mkv/i.test((file.type || "") + file.name)) {
+    try { return await FX.audio16k(file); }
+    catch (e) { if (e.noAudio) throw e; first = e; console.warn("light audio read failed, trying the full decode:", e); }
+  }
+  try { return await decodeAudioFull(file); }
+  catch (e) { throw new Error((first ? first.message + " / " : "") + (e && e.message || e)); }
+}
+async function decodeAudioFull(file) {
   const buf = await file.arrayBuffer();
   const ctx = new OfflineAudioContext(1, 16000, 16000);
   const ab = await ctx.decodeAudioData(buf);  // decoded and resampled to 16 kHz, what Whisper wants
@@ -1982,7 +1991,12 @@ async function startFile(file) {
   await new Promise((r) => { if (video.readyState >= 1) r(); else { video.addEventListener("loadedmetadata", r, { once: true }); setTimeout(r, 5000); } });
   let audio;
   try { audio = await decodeAudio(file); }
-  catch (e) { if (my === token) setWorking(true, { stage: "Couldn't find any sound", note: "Cool Caps couldn't read audio from this video. Try another one.", error: true }); keepAwake(false); return; }
+  catch (e) {
+    if (my === token) setWorking(true, e && e.noAudio
+      ? { stage: "This video has no sound", note: "There's no audio in this video, so there's nothing to caption. Try one where someone's talking.", error: true }
+      : { stage: "Couldn't read the sound", note: "Cool Caps couldn't get the audio out of this video. Try another one, or send a screenshot of this to the developer. Details: " + String(e && e.message || e).slice(0, 160), error: true });
+    keepAwake(false); return;
+  }
   if (my !== token) return;
   const meta = { id: Date.now().toString(36), name: file.name, duration: video.duration || audio.length / 16000, width: video.videoWidth || 1080, height: video.videoHeight || 1920 };
   let ws;
@@ -2550,7 +2564,81 @@ const FX = (() => {
     for (const i of aIdx) parts.push((await aread(at.offsets[i], at.sizes[i])).slice());
     return { blob: new Blob(parts, { type: "video/mp4" }), thumb, seconds: (performance.now() - t0) / 1000, codec: dcfg.codec, rot };
   }
-  return { run };
+  /* ---------- sound for transcribing: pull just the audio track out of the file ----------
+     Much lighter than loading the whole video into memory, which phones often refuse for long or 4K videos. */
+  function audioConfig(tr) {
+    const e = tr.entry, b = e.bytes, p = e.hdr;
+    const ver = u16(b, p + 8);  // QuickTime (.mov) sound descriptions can be version 1 or 2 with extra fields
+    let channels = u16(b, p + 16), rate = u32(b, p + 24) >>> 16;
+    if (ver === 2) { const dv = new DataView(b.buffer, b.byteOffset + p + 32, 8); rate = Math.round(dv.getFloat64(0)); channels = u32(b, p + 40); }
+    const children = kids(b, p + 28 + (ver === 1 ? 16 : ver === 2 ? 36 : 0), b.length);
+    if (e.type === "mp4a") {
+      let esds = children.find((k) => k.type === "esds");
+      if (!esds) { const wave = children.find((k) => k.type === "wave"); if (wave) esds = kids(b, wave.start + wave.hdr, wave.end).find((k) => k.type === "esds"); }  // .mov keeps it inside "wave"
+      if (!esds) throw new Error("no esds");
+      // walk the descriptors: ES (3) > DecoderConfig (4) > DecoderSpecificInfo (5)
+      let o = esds.start + esds.hdr + 4, asc = null, oti = 0x40;
+      const len = () => { let n = 0, c; do { c = b[o++]; n = (n << 7) | (c & 127); } while (c & 128); return n; };
+      while (o < esds.end) {
+        const tag = b[o++], n = len(), start = o;
+        if (tag === 3) { const fl = b[o + 2]; o += 3; if (fl & 128) o += 2; if (fl & 64) o += 1 + b[o]; if (fl & 32) o += 2; continue; }
+        if (tag === 4) { oti = b[o]; o += 13; continue; }
+        if (tag === 5) { asc = b.slice(o, o + n); break; }
+        o = start + n;
+      }
+      if (oti !== 0x40 && oti !== 0x67 && oti !== 0x66) throw new Error("audio type " + oti.toString(16));
+      const aot = asc && asc.length ? asc[0] >> 3 : 2;
+      return { codec: "mp4a.40." + (aot || 2), sampleRate: rate, numberOfChannels: channels || 2, ...(asc ? { description: asc } : {}) };
+    }
+    if (e.type === "Opus") {
+      const d = children.find((k) => k.type === "dOps");
+      return { codec: "opus", sampleRate: 48000, numberOfChannels: d ? b[d.start + d.hdr + 1] : channels || 2 };
+    }
+    throw new Error("audio codec " + e.type);
+  }
+  async function audio16k(file, onProgress) {
+    if (!("AudioDecoder" in window)) throw new Error("no AudioDecoder");
+    const { b, box: moov } = await readMoov(file);
+    const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
+    const at = tracks.find((t) => t.handler === "soun");
+    if (!at) { const err = new Error("This video has no sound track."); err.noAudio = true; throw err; }
+    const cfg = audioConfig(at);
+    if (!(await AudioDecoder.isConfigSupported(cfg)).supported) throw new Error("can't decode " + cfg.codec);
+    const total = Math.ceil((at.dts[at.n - 1] + at.durs[at.n - 1] - at.dts[0]) / at.timescale * 16000) + 16000;
+    const out = new Float32Array(total);
+    let w = 0, acc = 0, accN = 0, pos = 0, ratio = 0, err = null;
+    const dec = new AudioDecoder({
+      output: (ad) => {
+        try {
+          const n = ad.numberOfFrames, ch = ad.numberOfChannels;
+          if (!ratio) ratio = ad.sampleRate / 16000;
+          const planes = [];
+          for (let c = 0; c < Math.min(ch, 2); c++) { const a = new Float32Array(n); ad.copyTo(a, { planeIndex: c, format: "f32-planar" }); planes.push(a); }
+          // mix to mono and shrink to 16 kHz by averaging (gentle low-pass, plenty for speech)
+          for (let i = 0; i < n; i++) {
+            acc += planes.length > 1 ? (planes[0][i] + planes[1][i]) * 0.5 : planes[0][i]; accN++;
+            pos += 1;
+            if (pos >= ratio) { pos -= ratio; if (w < out.length) out[w++] = acc / accN; acc = 0; accN = 0; }
+          }
+        } catch (e) { err = e; } finally { ad.close(); }
+      },
+      error: (e) => (err = e),
+    });
+    dec.configure(cfg);
+    const read = reader(file);
+    for (let i = 0; i < at.n; i++) {
+      if (err) throw err;
+      const data = await read(at.offsets[i], at.sizes[i]);
+      dec.decode(new EncodedAudioChunk({ type: "key", timestamp: Math.round((at.dts[i] - at.dts[0]) * 1e6 / at.timescale), duration: Math.round(at.durs[i] * 1e6 / at.timescale), data }));
+      if (dec.decodeQueueSize > 40) await new Promise((r) => setTimeout(r, 0));
+      if (onProgress && i % 200 === 0) onProgress(i / at.n);
+    }
+    await dec.flush(); dec.close();
+    if (err) throw err;
+    if (w < 1600) throw new Error("no audio decoded");
+    return out.subarray(0, w);
+  }
+  return { run, audio16k };
 })();
 
 $("#exportBtn").onclick = async () => {
