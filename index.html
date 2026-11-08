@@ -144,6 +144,11 @@ a.btn { color: var(--text); }
 .lede { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
 .langchip { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0 0; padding: 10px 14px; border-radius: 16px; background: var(--card, rgba(255,255,255,.05)); border: 1px solid var(--line-2); font-weight: 700; font-size: 14px; }
 .langchip span { opacity: .75; }
+.warncard { display: grid; gap: 6px; margin-top: 12px; padding: 14px 16px; border-radius: 18px; background: rgba(255,225,77,.08); border: 1px solid rgba(255,225,77,.35); }
+.warncard[hidden] { display: none; }
+.warncard b { font-size: 15px; }
+.warncard span { font-size: 13.5px; color: var(--muted); line-height: 1.45; }
+.warncard .btn { justify-self: start; margin-top: 4px; }
 .outchip { margin-top: 8px; }
 .outchip > span, .seg.mini button { white-space: nowrap; }
 .seg.mini { padding: 3px; border-radius: 12px; gap: 2px; }
@@ -474,6 +479,15 @@ body.is-pro .probadge { display: none; }
       </button>
       <label class="langchip"><span>Spoken language</span><select id="homeLang" aria-label="Spoken language in the video"></select></label>
       <div class="langchip outchip"><span>Captions in</span><div class="seg mini" id="outSeg" role="group" aria-label="Caption language"><button data-v="same">Original</button><button data-v="en">English</button></div></div>
+      <div class="warncard" id="inAppCard" hidden>
+        <b>Open Cool Caps in your browser</b>
+        <span id="inAppHow">You're inside another app's browser, which can't save videos or install Cool Caps.</span>
+        <button class="btn primary small" id="inAppCopy">Copy link</button>
+      </div>
+      <div class="warncard" id="oldCard" hidden>
+        <b>Your browser needs an update</b>
+        <span id="oldHow">Cool Caps needs a newer browser to write captions on your phone.</span>
+      </div>
       <div class="stats" id="stats" hidden>
         <div class="fire"><b id="stStreak">0</b><span>🔥 day streak</span></div>
         <div><b id="stCount">0</b><span>videos made</span></div>
@@ -1317,10 +1331,17 @@ const CAPTION_FONTS = [
   { key: "bungee", label: "Bungee", css: "Bungee", w: 400, vibe: "Street sign", ratio: 0.78 },
   { key: "shrikhand", label: "Shrikhand", css: "Shrikhand", w: 400, vibe: "Retro italic", ratio: 0.8 },
 ];
+const UA = navigator.userAgent || "";
+const IS_IOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_ANDROID = /Android/i.test(UA);
+// in-app browsers (Telegram, Instagram, TikTok, Facebook, Snapchat, LINE, Android web views) can't install apps
+// and often can't save files or keep the Library
+const IN_APP = !!window.TelegramWebviewProxy || /FBAN|FBAV|FB_IAB|Instagram|Telegram|Line\/|Snapchat|musical_ly|Bytedance|TikTok|; wv\)/i.test(UA);
+const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.2 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.4 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1521,9 +1542,17 @@ async function loadRecent() {
   $("#libSize").textContent = items.length ? `${items.length} video${items.length > 1 ? "s" : ""} · ${mb(total)} on this phone` : "Videos you make are kept on this phone";
 }
 function saveToPhone(it) {
+  if (IS_IOS) {
+    const file = new File([it.blob], it.name, { type: it.type || "video/mp4" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      toast("Tap \"Save Video\" to put it in Photos");
+      navigator.share({ files: [file], title: niceVid(it.name) }).catch(() => {});
+      return;
+    }
+  }
   const a = el("a"); a.href = URL.createObjectURL(it.blob); a.download = it.name; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-  toast("Saved to Downloads. It's in Files and in Google Photos › Library.");
+  toast(IS_IOS ? "Saved to Files › Downloads. Open it there and tap Share › Save Video to add it to Photos." : IN_APP ? "If nothing downloaded, open Cool Caps in your browser and save it from there." : "Saved to Downloads. It's in Files and in Google Photos › Library.");
 }
 async function shareVideo(it) {
   const file = new File([it.blob], it.name, { type: it.type || "video/mp4" });
@@ -1897,18 +1926,34 @@ function getWorker() {
   return asrWorker;
 }
 async function decodeAudio(file) {
-  let first = null;
+  const fails = [];
   if (!/webm|matroska|mkv/i.test((file.type || "") + file.name)) {
+    // 1) read the audio track directly (Android, desktop Chrome)
     try { return await FX.audio16k(file); }
-    catch (e) { if (e.noAudio) throw e; first = e; console.warn("light audio read failed, trying the full decode:", e); }
+    catch (e) { if (e.noAudio) throw e; fails.push(e.message); }
+    // 2) copy the sound into a small audio-only file and decode that (iPhone)
+    try { return await decodeAudioFull(await FX.audioM4A(file)); }
+    catch (e) { if (e.noAudio) throw e; fails.push(e && e.message || String(e)); }
   }
+  // 3) the old way: decode the whole video file
   try { return await decodeAudioFull(file); }
-  catch (e) { throw new Error((first ? first.message + " / " : "") + (e && e.message || e)); }
+  catch (e) { fails.push(e && e.message || String(e)); throw new Error(fails.join(" / ")); }
 }
 async function decodeAudioFull(file) {
   const buf = await file.arrayBuffer();
-  const ctx = new OfflineAudioContext(1, 16000, 16000);
-  const ab = await ctx.decodeAudioData(buf);  // decoded and resampled to 16 kHz, what Whisper wants
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  let ctx;
+  try { ctx = new OAC(1, 16000, 16000); }
+  catch {
+    // older Safari won't make a 16 kHz context: decode at 44.1 kHz and shrink it ourselves
+    const c2 = new OAC(1, 44100, 44100);
+    const ab2 = await new Promise((res, rej) => { const pr = c2.decodeAudioData(buf, res, (e) => rej(e || new Error("Decoding failed"))); if (pr && pr.then) pr.then(res, rej); });
+    const ch = ab2.numberOfChannels, a0 = ab2.getChannelData(0), a1 = ch > 1 ? ab2.getChannelData(1) : null;
+    const ratio = ab2.sampleRate / 16000, out = new Float32Array(Math.floor(ab2.length / ratio));
+    for (let i = 0; i < out.length; i++) { const s0 = Math.floor(i * ratio), s1 = Math.max(s0 + 1, Math.floor((i + 1) * ratio)); let acc = 0; for (let k = s0; k < s1; k++) acc += a1 ? (a0[k] + a1[k]) * 0.5 : a0[k]; out[i] = acc / (s1 - s0); }
+    return out;
+  }
+  const ab = await new Promise((res, rej) => { const pr = ctx.decodeAudioData(buf, res, (e) => rej(e || new Error("Decoding failed"))); if (pr && pr.then) pr.then(res, rej); });  // decoded and resampled to 16 kHz, what Whisper wants
   if (ab.numberOfChannels === 1) return ab.getChannelData(0).slice();
   const a = ab.getChannelData(0), b = ab.getChannelData(1), out = new Float32Array(a.length);
   for (let i = 0; i < a.length; i++) out[i] = (a[i] + b[i]) / 2;
@@ -1968,7 +2013,7 @@ function transcribe(audio, onStatus) {
     };
     w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
     const translate = APP.out === "en";
-    const mkey = translate && APP.model === "max" ? "medium" : APP.model;  // Max (turbo) can't translate; Best can
+    const mkey = (translate || IS_IOS) && APP.model === "max" ? "medium" : APP.model;  // Max can't translate, and is too big for iPhones
     w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language: APP.lang || null, cpu: APP.engine !== "gpu", translate }, [audio.buffer]);
   });
 }
@@ -2368,8 +2413,9 @@ const FX = (() => {
       const d = b.slice(c.start + c.hdr, c.end);
       return { codec: e.type + "." + hex(d[1]) + hex(d[2]) + hex(d[3]), codedWidth: width, codedHeight: height, description: d };
     }
-    if (e.type === "hvc1" || e.type === "hev1") {
+    if (e.type === "hvc1" || e.type === "hev1" || e.type === "dvh1" || e.type === "dvhe") {
       const c = children.find((k) => k.type === "hvcC"); if (!c) throw new Error("no hvcC");
+      if (e.type[0] === "d") e.type = e.type === "dvh1" ? "hvc1" : "hev1";  // iPhone HDR (Dolby Vision 8.4) decodes as plain HEVC
       const d = b.slice(c.start + c.hdr, c.end);
       const ps = d[1] >> 6, tier = (d[1] >> 5) & 1, prof = d[1] & 31;
       let compat = u32(d, 2), rev = 0; for (let i = 0; i < 32; i++) { rev = (rev << 1) | (compat & 1); compat >>>= 1; }
@@ -2638,7 +2684,29 @@ const FX = (() => {
     if (w < 1600) throw new Error("no audio decoded");
     return out.subarray(0, w);
   }
-  return { run, audio16k };
+  /* iPhones: no AudioDecoder, and Safari can't decode the sound of a big .MOV in one go.
+     So copy just the audio track into a small audio-only .m4a (no re-encoding) that Safari decodes happily. */
+  async function audioM4A(file) {
+    const { b, box: moov } = await readMoov(file);
+    const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
+    const at = tracks.find((t) => t.handler === "soun");
+    if (!at) { const err = new Error("This video has no sound track."); err.noAudio = true; throw err; }
+    const read = reader(file), data = [];
+    let body = 0;
+    for (let i = 0; i < at.n; i++) { const d = (await read(at.offsets[i], at.sizes[i])).slice(); data.push(d); body += d.length; }
+    const durs = at.durs.slice(0, at.n), total = durs.reduce((x, y) => x + y, 0), ms = Math.round(total * 1000 / at.timescale);
+    const ftyp = box("ftyp", enc.encode("M4A "), U32(0), enc.encode("M4A mp42isom"));
+    const build = (mdatStart) => {
+      let off = mdatStart; const offs = data.map((d) => { const o = off; off += d.length; return o; });
+      const t = trak(1, { handler: "soun", timescale: at.timescale, duration: total, movieDur: ms, stsd: at.stsd, tables: sampleTables(durs, data.map((d) => d.length), offs, null, null) });
+      const mvhd = full("mvhd", 1, 0, U64(0), U64(0), U32(1000), U64(ms), U32(0x10000), U16(0x100), zeros(10), MATRIX, zeros(24), U32(2));
+      return box("moov", mvhd, t);
+    };
+    const probe = build(0), moovOut = build(ftyp.length + probe.length + 8);
+    const mdatHead = new Uint8Array(8); new DataView(mdatHead.buffer).setUint32(0, body + 8); mdatHead.set(enc.encode("mdat"), 4);
+    return new Blob([ftyp, moovOut, mdatHead, ...data], { type: "audio/mp4" });
+  }
+  return { run, audio16k, audioM4A };
 })();
 
 $("#exportBtn").onclick = async () => {
@@ -2651,6 +2719,10 @@ $("#exportBtn").onclick = async () => {
   const v = el("video"); v.src = objectURL; v.playsInline = true; v.preload = "auto";
   v.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
   document.body.append(v);
+  // iPhones only allow sound if playback starts during the tap itself: unlock both now, in case the backup method is needed
+  try { ac.resume && ac.resume(); } catch {}
+  let primed = Promise.resolve();
+  try { v.muted = true; const pp = v.play(); if (pp && pp.then) primed = pp.then(() => v.pause()).catch(() => {}); } catch {}
   video.pause(); go("result");
   const D0 = (job && job.duration) || video.duration || 0;
   resultProgress(0, "Getting your video ready…", null, "Step 1 of 2 · Getting ready");
@@ -2708,7 +2780,8 @@ $("#exportBtn").onclick = async () => {
     const hasVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
     const onFrame = () => { draw(); if (!v.ended) v.requestVideoFrameCallback(onFrame); };
     const loop = () => { draw(); if (!v.ended) requestAnimationFrame(loop); };
-    v.currentTime = 0; draw();
+    await primed;  // let the unlock finish first, so it can't pause the real recording
+    v.pause(); v.muted = false; v.currentTime = 0; draw();
     rec.start(500);
     await ac.resume();
     await v.play();
@@ -2799,27 +2872,53 @@ function showDone(it) {
   if (st.streak > 1 && st.streak === st.best) badges.append(el("span", "", "🏆 Best streak yet"));
   const lines = ["It's ready.", "Nailed it.", "That's a banger.", "Ready to post.", "Looking good."];
   r.append(fr, el("h2", "display", lines[(st.count - 1) % lines.length]), badges, row, el("p", "fname", "Kept in your Library · " + it.name), done);
+  if ((IS_IOS && !STANDALONE) || IN_APP) r.append(el("p", "fname", IN_APP ? "Tip: save it now. In-app browsers don't always keep your Library." : "Tip: save it to Photos. Safari can clear the Library if you don't open Cool Caps for a while. Adding Cool Caps to your Home Screen keeps it."));
   confetti();
 }
 $("#resBack").onclick = () => go(job ? "editor" : "home");
 
 /* ===================== install on the home screen ===================== */
 let installEvt = null;
+function setupEnvironment() {
+  if (IN_APP) {
+    $("#inAppCard").hidden = false;
+    $("#inAppHow").textContent = IS_IOS
+      ? "You're inside another app's browser, which can't save videos or install Cool Caps. Tap ⋯ (or the share icon) and choose \"Open in Safari\", or copy the link and paste it into Safari."
+      : "You're inside another app's browser, which can't save videos or install Cool Caps. Tap ⋮ and choose \"Open in Chrome\" (or \"Open in browser\"), or copy the link and paste it into Chrome.";
+    $("#inAppCopy").onclick = async () => { const url = location.origin + location.pathname; try { await navigator.clipboard.writeText(url); toast("Link copied. Paste it into " + (IS_IOS ? "Safari" : "Chrome")); } catch { prompt("Copy this link:", url); } };
+  }
+  // the speech engine needs WebAssembly, workers and the Web Audio API
+  const old = typeof WebAssembly !== "object" || typeof Worker !== "function" || !(window.OfflineAudioContext || window.webkitOfflineAudioContext);
+  if (old) { $("#oldCard").hidden = false; $("#oldHow").textContent = IS_IOS ? "Cool Caps needs iOS 16.4 or newer. Update your iPhone in Settings › General › Software Update." : "Cool Caps needs a recent Chrome. Update Chrome from the Play Store, then open Cool Caps again."; }
+  // iPhones: the Max model is too big for Safari's memory limit
+  if (IS_IOS) { const mx = $('#accSeg [data-v="max"]'); if (mx) mx.hidden = true; if (APP.model === "max") { APP.model = "medium"; saveApp(); } }
+}
 function setupInstall() {
-  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
-  if (standalone) return;
+  setupEnvironment();
+  if (STANDALONE) return;
   $("#installCard").hidden = false;
+  if (IS_IOS) $("#installHow").textContent = IN_APP ? "Open in Safari first, then tap Share ⬆︎ and \"Add to Home Screen\"." : "Tap the Share button ⬆︎, then \"Add to Home Screen\".";
   $("#installBtn").onclick = async () => {
     if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice.catch(() => null); if (r && r.outcome === "accepted") $("#installCard").hidden = true; installEvt = null; }
+    else if (IS_IOS) toast(IN_APP ? "Open this page in Safari first, then tap Share ⬆︎ and \"Add to Home Screen\"." : "Tap the Share button ⬆︎ at the bottom of Safari, then \"Add to Home Screen\".");
+    else if (IN_APP) toast("Open this page in Chrome first (⋮ › Open in Chrome), then install it from there.");
     else toast("In Chrome, tap the ⋮ menu, then \"Add to Home screen\" or \"Install app\".");
   };
 }
+// phones pause pages in the background: tell people why progress stopped
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const busy = (view === "editor" && !$("#working").hidden && !$("#wBack").textContent.includes("Go back")) || (view === "result" && exporting);
+  if (busy) toast("Keep Cool Caps open until it's done. Phones pause it when you switch apps.");
+});
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; $("#installHow").textContent = "Opens full screen, like a real app. Tap Install."; });
 window.addEventListener("appinstalled", () => { $("#installCard").hidden = true; toast("Cool Caps is on your home screen"); });
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(() => {
     // The first visit isn't sped up until the helper is running: reload once so it is.
-    if (!window.crossOriginIsolated && !sessionStorage.getItem("coolcaps.coi")) { sessionStorage.setItem("coolcaps.coi", "1"); if (!job) location.reload(); }
+    // Safari and in-app browsers don't support it, so don't reload for nothing there; and only ever try once
+    const can = window.HTMLIFrameElement && "credentialless" in HTMLIFrameElement.prototype;
+    if (!window.crossOriginIsolated && can && !IN_APP && !store.get("coolcaps.coiTried") && !job) { store.set("coolcaps.coiTried", true); location.reload(); }
   }).catch(() => {});
 }
 
