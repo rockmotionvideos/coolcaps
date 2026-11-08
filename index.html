@@ -1445,7 +1445,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.5 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.7 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -2065,14 +2065,32 @@ async function decodeAudio(file) {
     catch (e) { if (e.noAudio) throw e; fails.push(e.message); }
     // 2) copy the sound into a small audio-only file and decode that (iPhone)
     try { return await decodeAudioFull(await FX.audioM4A(file)); }
-    catch (e) { if (e.noAudio) throw e; fails.push(e && e.message || String(e)); }
+    catch (e) { if (e.noAudio) throw e; fails.push("m4a: " + (e && e.message || String(e))); }
+    // 3) same sound as a raw AAC stream, which Safari also understands
+    try { return await decodeAudioFull(await FX.audioADTS(file)); }
+    catch (e) { if (e.noAudio) throw e; fails.push("aac: " + (e && e.message || String(e))); }
   }
-  // 3) the old way: decode the whole video file
+  // 4) the old way: decode the whole video file
   try { return await decodeAudioFull(file); }
   catch (e) { fails.push(e && e.message || String(e)); throw new Error(fails.join(" / ")); }
 }
 async function decodeAudioFull(file) {
-  const buf = await file.arrayBuffer();
+  try { return await decodeAt16k(await file.arrayBuffer()); }
+  catch (e) {
+    // some iPhones refuse to decode straight to 16 kHz: decode at 44.1 kHz and shrink it ourselves
+    try { return await decodeAt441(await file.arrayBuffer()); } catch { throw e; }
+  }
+}
+async function decodeAt441(buf) {
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const c2 = new OAC(1, 44100, 44100);
+  const ab2 = await new Promise((res, rej) => { const pr = c2.decodeAudioData(buf, res, (e) => rej(e || new Error("Decoding failed"))); if (pr && pr.then) pr.then(res, rej); });
+  const ch = ab2.numberOfChannels, a0 = ab2.getChannelData(0), a1 = ch > 1 ? ab2.getChannelData(1) : null;
+  const ratio = ab2.sampleRate / 16000, out = new Float32Array(Math.floor(ab2.length / ratio));
+  for (let i = 0; i < out.length; i++) { const s0 = Math.floor(i * ratio), s1 = Math.max(s0 + 1, Math.floor((i + 1) * ratio)); let acc = 0; for (let k = s0; k < s1; k++) acc += a1 ? (a0[k] + a1[k]) * 0.5 : a0[k]; out[i] = acc / (s1 - s0); }
+  return out;
+}
+async function decodeAt16k(buf) {
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   let ctx;
   try { ctx = new OAC(1, 16000, 16000); }
@@ -2171,7 +2189,7 @@ async function startFile(file) {
   catch (e) {
     if (my === token) setWorking(true, e && e.noAudio
       ? { stage: "This video has no sound", note: "There's no audio in this video, so there's nothing to caption. Try one where someone's talking.", error: true }
-      : { stage: "Couldn't read the sound", note: "Cool Caps couldn't get the audio out of this video. Try another one, or send a screenshot of this to the developer. Details: " + String(e && e.message || e).slice(0, 160), error: true });
+      : { stage: "Couldn't read the sound", note: "Cool Caps couldn't get the audio out of this video. Try another one, or send a screenshot of this to the developer. Details (v" + (INFO ? INFO.version : "?") + "): " + String(e && e.message || e).slice(0, 200), error: true });
     keepAwake(false); return;
   }
   if (my !== token) return;
@@ -2621,6 +2639,13 @@ const FX = (() => {
     };
   }
 
+  // newer iPhones can store two sound tracks: normal AAC stereo plus "Spatial Audio" (Apple's own format, which
+  // browsers can't decode). Always prefer a track we can actually play.
+  function pickAudio(tracks) {
+    const snd = tracks.filter((t) => t.handler === "soun" && t.entry);
+    const rank = (t) => (t.entry.type === "mp4a" ? 0 : t.entry.type === "Opus" ? 1 : t.entry.type === "alac" || t.entry.type === "ac-3" ? 3 : 5);
+    return snd.sort((a, b) => rank(a) - rank(b))[0];
+  }
   /* ---------- MP4 writer ---------- */
   const enc = new TextEncoder();
   function box(type, ...parts) {
@@ -2671,7 +2696,7 @@ const FX = (() => {
     if (!("VideoDecoder" in window && "VideoEncoder" in window && "VideoFrame" in window)) throw new Error("no webcodecs");
     const { b, box: moov } = await readMoov(file);
     const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
-    const vt = tracks.find((t) => t.handler === "vide"), at = tracks.find((t) => t.handler === "soun");
+    const vt = tracks.find((t) => t.handler === "vide"), at = pickAudio(tracks);
     if (!vt) throw new Error("no video track");
     const dcfg = videoConfig(vt);
     if (!(await VideoDecoder.isConfigSupported(dcfg)).supported) throw new Error("can't decode " + dcfg.codec);
@@ -2824,7 +2849,7 @@ const FX = (() => {
     if (!("AudioDecoder" in window)) throw new Error("no AudioDecoder");
     const { b, box: moov } = await readMoov(file);
     const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
-    const at = tracks.find((t) => t.handler === "soun");
+    const at = pickAudio(tracks);
     if (!at) { const err = new Error("This video has no sound track."); err.noAudio = true; throw err; }
     const cfg = audioConfig(at);
     if (!(await AudioDecoder.isConfigSupported(cfg)).supported) throw new Error("can't decode " + cfg.codec);
@@ -2867,7 +2892,7 @@ const FX = (() => {
   async function audioM4A(file) {
     const { b, box: moov } = await readMoov(file);
     const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
-    const at = tracks.find((t) => t.handler === "soun");
+    const at = pickAudio(tracks);
     if (!at) { const err = new Error("This video has no sound track."); err.noAudio = true; throw err; }
     const read = reader(file), data = [];
     let body = 0;
@@ -2884,7 +2909,24 @@ const FX = (() => {
     const mdatHead = new Uint8Array(8); new DataView(mdatHead.buffer).setUint32(0, body + 8); mdatHead.set(enc.encode("mdat"), 4);
     return new Blob([ftyp, moovOut, mdatHead, ...data], { type: "audio/mp4" });
   }
-  return { run, audio16k, audioM4A };
+  async function audioADTS(file) {
+    const { b, box: moov } = await readMoov(file);
+    const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
+    const at = pickAudio(tracks);
+    if (!at) { const err = new Error("This video has no sound track."); err.noAudio = true; throw err; }
+    const cfg = audioConfig(at);
+    if (!/^mp4a\.40\./.test(cfg.codec) || !cfg.description) throw new Error("not AAC");
+    const asc = cfg.description, aot = asc[0] >> 3, sfi = ((asc[0] & 7) << 1) | (asc[1] >> 7), ch = (asc[1] >> 3) & 15;
+    const read = reader(file), parts = [];
+    for (let i = 0; i < at.n; i++) {
+      const d = await read(at.offsets[i], at.sizes[i]), len = d.length + 7, h = new Uint8Array(7);
+      h[0] = 0xff; h[1] = 0xf1; h[2] = (((aot - 1) & 3) << 6) | ((sfi & 15) << 2) | ((ch >> 2) & 1);
+      h[3] = ((ch & 3) << 6) | ((len >> 11) & 3); h[4] = (len >> 3) & 255; h[5] = ((len & 7) << 5) | 0x1f; h[6] = 0xfc;
+      parts.push(h, d.slice());
+    }
+    return new Blob(parts, { type: "audio/aac" });
+  }
+  return { run, audio16k, audioM4A, audioADTS };
 })();
 
 $("#exportBtn").onclick = async () => {
