@@ -1445,7 +1445,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.7 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "3.8 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1464,7 +1464,7 @@ async function boot() {
   if (warn.length) { $("#warn").innerHTML = warn.join("<br><br>"); $("#warn").hidden = false; }
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
 
-  buildHome(); buildEditorControls(); buildSettings(); setupInstall();
+  buildHome(); buildEditorControls(); buildSettings(); setupInstall(); setTimeout(checkCrash, 600);
   refreshAll(true);
   go("home");
   requestAnimationFrame(frame);
@@ -1799,7 +1799,7 @@ function syncSettings() {
   const q = APP.quality === "max" && !isPro() ? "high" : APP.quality;
   $$("#qSeg button").forEach((b) => pressed(b, b.dataset.v === q));
   $("#qMax").classList.toggle("locked", !isPro());
-  $("#accNote").textContent = ACC_NOTE[APP.model] || ""; $("#qNote").textContent = Q_NOTE[APP.quality] || "";
+  $("#accNote").textContent = (ACC_NOTE[APP.model] || "") + (IS_IOS ? " On iPhone, Cool Caps uses the lighter models, because Safari gives web pages less memory." : ""); $("#qNote").textContent = Q_NOTE[APP.quality] || "";
   $("#langSel").value = APP.lang; $("#rememberSw").setAttribute("aria-checked", APP.remember);
 }
 
@@ -2109,6 +2109,34 @@ async function decodeAt16k(buf) {
   for (let i = 0; i < a.length; i++) out[i] = (a[i] + b[i]) / 2;
   return out;
 }
+/* Crash guard: if the phone runs out of memory, the browser silently reloads the page. We note what we were
+   doing before starting; if the page comes back and the note is still there, it crashed, so switch to a lighter model. */
+const INFLIGHT = "coolcaps.inflight";
+function inflight(patch) {
+  try {
+    if (!patch) return localStorage.removeItem(INFLIGHT);
+    const cur = JSON.parse(localStorage.getItem(INFLIGHT) || "null") || { t: Date.now() };
+    localStorage.setItem(INFLIGHT, JSON.stringify({ ...cur, ...patch }));
+  } catch {}
+}
+function checkCrash() {
+  let c = null; try { c = JSON.parse(localStorage.getItem(INFLIGHT) || "null"); } catch {}
+  inflight(null);
+  if (!c || Date.now() - (c.t || 0) > 45 * 60e3) return;
+  const order = ["base", "small", "medium", "max"], was = c.model || APP.model, i = order.indexOf(was);
+  const lighter = i > 0 ? order[i - 1] : null;
+  if (lighter) { APP.model = lighter; saveApp(); syncSettings(); }
+  const nm = { base: "Fast", small: "Balanced", medium: "Best", max: "Max" };
+  openSheet((sh) => {
+    sh.append(el("span", "tag y", "Fixed it for you"), el("h3", "display", "Your phone ran out of memory"));
+    sh.append(el("p", "sub", lighter
+      ? `The speech model was too big for the memory your ${IS_IOS ? "iPhone gives Safari" : "browser has"}, so the page restarted. Cool Caps has switched Accuracy to ${nm[lighter]}, which uses much less memory. Add your video again.`
+      : `Even the lightest speech model ran out of memory. Close other apps and browser tabs${IN_APP ? ", open Cool Caps in " + (IS_IOS ? "Safari" : "Chrome") + " instead of this app's browser" : ""}, or try a shorter video.`));
+    const ok = el("button", "btn primary block", "Add a video"); ok.onclick = () => { closeSheet(); $("#pick").click(); };
+    const later = el("button", "btn ghost block", "OK"); later.onclick = closeSheet;
+    sh.append(ok, later);
+  });
+}
 let detectedLang = "", detectFailed = false;
 const langName = (c) => (LANGS.find((l) => l[0] === c) || [, c])[1];
 function transcribe(audio, onStatus) {
@@ -2137,7 +2165,7 @@ function transcribe(audio, onStatus) {
           const vals = Object.values(files), L = vals.reduce((a, v) => a + v[0], 0), T = vals.reduce((a, v) => a + v[1], 0);
           onStatus({ pct: T ? L / T : null, stage: "Downloading the speech model", note: `First time only (${Math.round(T / 1e6)} MB). After this it starts straight away, even offline.` });
         }
-      } else if (m.type === "detecting") onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
+      } else if (m.type === "detecting") inflight({ stage: "detecting" }), onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
       else if (m.type === "detected" && !m.lang) { detectFailed = true; }
       else if (m.type === "detected") { detectedLang = m.lang; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
       else if (m.type === "warn") console.warn(m.message);
@@ -2150,6 +2178,7 @@ function transcribe(audio, onStatus) {
       }
       else if (m.type === "loading") onStatus({ pct: null, stage: "Getting ready", note: "Warming up the speech engine on your phone.", cancel: true });
       else if (m.type === "stage") {
+        inflight({ stage: "transcribing" });
         tStage = performance.now();
         rateKey = (APP.model || "small") + "|" + devKind;
         est = Math.max(3, len * (Number(store.get("coolcaps.rate." + rateKey)) || GUESS_RATE[rateKey] || 0.6));
@@ -2157,13 +2186,15 @@ function transcribe(audio, onStatus) {
       } else if (m.type === "done") {
         // remember how fast this phone is, so next time's estimate is spot on
         if (len > 5) store.set("coolcaps.rate." + rateKey, +(((performance.now() - tStage) / 1000) / len).toFixed(3));
-        finish(); resolve(splitLongWords(m.words));
+        finish(); inflight(null); resolve(splitLongWords(m.words));
       }
-      else if (m.type === "error") { finish(); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
+      else if (m.type === "error") { finish(); inflight(null); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
     };
-    w.onerror = (e) => { finish(); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
+    w.onerror = (e) => { finish(); inflight(null); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
     const translate = APP.out === "en";
-    const mkey = (translate || IS_IOS) && APP.model === "max" ? "medium" : APP.model;  // Max can't translate, and is too big for iPhones
+    let mkey = translate && APP.model === "max" ? "medium" : APP.model;  // Max can't translate
+    if (IS_IOS && (mkey === "medium" || mkey === "max")) mkey = "small";  // iPhones give web pages too little memory for the big models
+    inflight({ model: mkey, stage: "loading", ios: IS_IOS });
     w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language: APP.lang || null, cpu: APP.engine !== "gpu", translate }, [audio.buffer]);
   });
 }
@@ -3111,7 +3142,11 @@ function setupEnvironment() {
   const old = typeof WebAssembly !== "object" || typeof Worker !== "function" || !(window.OfflineAudioContext || window.webkitOfflineAudioContext);
   if (old) { $("#oldCard").hidden = false; $("#oldHow").textContent = IS_IOS ? "Cool Caps needs iOS 16.4 or newer. Update your iPhone in Settings › General › Software Update." : "Cool Caps needs a recent Chrome. Update Chrome from the Play Store, then open Cool Caps again."; }
   // iPhones: the Max model is too big for Safari's memory limit
-  if (IS_IOS) { const mx = $('#accSeg [data-v="max"]'); if (mx) mx.hidden = true; if (APP.model === "max") { APP.model = "medium"; saveApp(); } }
+  if (IS_IOS) {
+    ["max", "medium"].forEach((k) => { const b = $(`#accSeg [data-v="${k}"]`); if (b) b.hidden = true; });
+    if (APP.model === "max" || APP.model === "medium") { APP.model = "small"; saveApp(); }
+    const n = $("#accNote"); if (n) n.dataset.ios = "1";
+  }
 }
 function setupInstall() {
   setupEnvironment();
