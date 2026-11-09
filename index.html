@@ -345,6 +345,12 @@ a.linkrow .chev { margin-left: auto; font-size: 26px; line-height: 1; color: var
 .tw.spoil::before { content: "🙈 "; }
 .problog { max-height: 42vh; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 ui-monospace, Menlo, monospace; background: var(--raised); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin: 0; }
 button.row.linkrow { width: 100%; text-align: left; background: none; border: 0; font: inherit; color: inherit; cursor: pointer; }
+.lang-bar { position: absolute; left: 12px; top: 12px; z-index: 4; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 99px; border: 1px solid rgba(255,255,255,.18); background: rgba(10,10,15,.72); color: #fff; font: 700 13px var(--ui); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.lang-bar[hidden] { display: none; }
+.lang-bar.warn { background: var(--accent); color: #111; border-color: transparent; }
+.lang-bar u { text-decoration: none; opacity: .75; font-weight: 600; }
+.langgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.langgrid .btn { width: 100%; }
 .bigselect { width: 100%; height: 52px; border-radius: 16px; padding: 0 14px; font: 700 17px var(--ui); background: var(--raised); color: inherit; border: 1px solid var(--line-2); }
 .sharecard { padding: 16px; border-radius: 20px; background: var(--raised); border: 1px solid var(--line-2); text-align: center; font-weight: 800; font-size: 20px; }
 .scard:active { transform: scale(.97); }
@@ -550,6 +556,16 @@ body.is-pro .probadge { display: none; }
               <span class="rt"><b>Speech engine</b><span id="engNote"></span></span></div>
             <div class="seg" id="engSeg"><button data-v="cpu">Processor</button><button data-v="gpu">Graphics chip</button></div>
           </div>
+          <div class="row" id="cloudRow">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a5 5 0 0 1-.9-9.9A6 6 0 0 1 17.6 9 4.5 4.5 0 0 1 17 18z"/></svg></span>
+            <span class="rt"><b>Cloud transcription</b><span id="cloudNote"></span></span>
+            <button class="switch" id="cloudSw" role="switch" aria-label="Cloud transcription"></button>
+          </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2M21 12h0"/></svg></span>
+            <span class="rt"><b>Speech detector</b><span>Only listens where someone's talking. Fewer made-up words in noisy videos, and faster.</span></span>
+            <button class="switch" id="vadSw" role="switch" aria-label="Speech detector"></button>
+          </div>
           <div class="row">
             <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>
             <span class="rt"><b>Language</b><span>What's spoken in your videos</span></span>
@@ -622,6 +638,7 @@ body.is-pro .probadge { display: none; }
       <div class="gline v" id="gV" hidden></div>
       <div class="gline h" id="gH" hidden></div>
       <button class="pv-play" id="playBtn" aria-label="Play or pause"><span id="playIcon"></span><span id="tNow">0:00.0</span></button>
+      <button class="lang-bar" id="langBar" type="button" hidden></button>
       <div class="drag-hint" id="dragHint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>Drag captions to move</div>
       <div class="working" id="working" hidden>
         <div class="w-num display" id="wNum">0%</div>
@@ -883,6 +900,9 @@ const NO_HL = new Set(["fade", "plain", "blur"]);
    says "coming soon" but license keys can still be entered. PRODUCT_ID (optional) makes sure a key
    belongs to Cool Caps Pro and not some other product in your store. */
 const LOCK_PRO = false;           // launch: everything free. Set to true once CHECKOUT_URL is filled in.
+/* Cloud transcription: paste your Cloudflare Worker's address here (see cloud/worker.js).
+   While it's empty, transcription runs on the phone only. */
+const CLOUD_URL = "";               // e.g. "https://coolcaps.yourname.workers.dev"
 const CHECKOUT_URL = "";            // e.g. "https://coolcaps.lemonsqueezy.com/buy/xxxxxxxx"
 const PRODUCT_ID = 0;              // your Lemon Squeezy product id, 0 = don't check
 const PRO_PRICE = "A$7.99";        // shown on the upgrade screen
@@ -1367,7 +1387,7 @@ const DEFAULTS = {
 };
 const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
 const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
-const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same" };
+const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same", vad: true, cloud: true };
 let S = { ...DEFAULTS }, APP = { ...APP_DEFAULTS };
 let words = [], history = [], job = null, view = "home", tool = "style", videoDims = { w: 1080, h: 1920 };
 const store = {
@@ -1453,7 +1473,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.1 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.5 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1776,7 +1796,9 @@ function buildSettings() {
   sel.onchange = () => { APP.lang = sel.value; saveApp(); $("#homeLang").value = APP.lang; };
   const hl = $("#homeLang"); LANGS.forEach(([v, l]) => { const o = el("option", "", v ? l : "Auto-detect"); o.value = v; hl.append(o); });
   hl.value = APP.lang; hl.onchange = () => { APP.lang = hl.value; saveApp(); sel.value = APP.lang; toast(APP.lang ? `Got it: videos are in ${langName(APP.lang)}` + (APP.lang !== "en" && APP.model !== "max" ? ". Tip: set Accuracy to Max in Settings for the best results." : "") : "Cool Caps will work out the language"); };
-  $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; saveApp(); }));
+  $$("#accSeg button").forEach((b) => (b.onclick = () => { APP.model = b.dataset.v; APP.modelPicked = true; saveApp(); syncSettings(); }));
+  $("#cloudSw").onclick = () => { APP.cloud = !useCloud(); saveApp(); syncSettings(); toast(APP.cloud ? "Cloud transcription on" : "Captions will be made on this phone"); };
+  $("#vadSw").onclick = () => { APP.vad = APP.vad === false; saveApp(); syncSettings(); toast(APP.vad ? "Speech detector on" : "Speech detector off: the whole video goes to the speech engine"); };
   $$("#outSeg button").forEach((b) => (b.onclick = () => {
     APP.out = b.dataset.v; saveApp(); syncSettings();
     toast(APP.out === "en" ? "Captions will be translated into English" : "Captions will be in the language that's spoken");
@@ -1813,14 +1835,17 @@ function buildSettings() {
 }
 function saveApp() { store.set("loudcaps.app", APP); syncSettings(); }
 function syncSettings() {
-  $$("#accSeg button").forEach((b) => pressed(b, b.dataset.v === APP.model));
+  $$("#accSeg button").forEach((b) => pressed(b, b.dataset.v === chosenModel()));
   $$("#outSeg button").forEach((b) => pressed(b, b.dataset.v === (APP.out || "same")));
   $$("#engSeg button").forEach((b) => pressed(b, b.dataset.v === APP.engine));
+  $("#vadSw").setAttribute("aria-checked", APP.vad !== false);
+  $("#cloudRow").hidden = !CLOUD_URL; $("#cloudSw").setAttribute("aria-checked", useCloud());
+  $("#cloudNote").textContent = useCloud() ? "On: the most accurate captions, on every phone, in any language. The sound is sent securely to write the captions and isn't kept." : IS_IOS ? "Off: captions are made on this iPhone, which often runs out of memory. Turning this on is recommended." : "Off: captions are made on this phone only. Private, but slower and less accurate.";
   $("#engNote").textContent = APP.engine === "gpu" ? "Experimental. Fast on some phones, very slow on others. Switch back if it drags." : "Recommended. Fast and steady on every phone.";
   const q = APP.quality === "max" && !isPro() ? "high" : APP.quality;
   $$("#qSeg button").forEach((b) => pressed(b, b.dataset.v === q));
   $("#qMax").classList.toggle("locked", !isPro());
-  $("#accNote").textContent = (ACC_NOTE[APP.model] || "") + (IS_IOS ? " On iPhone, Cool Caps uses the lighter models, because Safari gives web pages less memory." : ""); $("#qNote").textContent = Q_NOTE[APP.quality] || "";
+  $("#accNote").textContent = (APP.modelPicked ? "" : "Picked automatically for your phone. ") + (ACC_NOTE[chosenModel()] || "") + (IS_IOS ? " On iPhone, Cool Caps uses the lighter models, because Safari gives web pages less memory." : ""); $("#qNote").textContent = Q_NOTE[APP.quality] || "";
   $("#langSel").value = APP.lang; $("#rememberSw").setAttribute("aria-checked", APP.remember);
 }
 
@@ -1993,7 +2018,7 @@ async function load(model, device) {
 // decoder step after <|startoftranscript|> and pick the most likely language token.
 // Without this the library quietly assumes English.
 const WHISPER_LANGS = "en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su".split(" ");
-async function detectLanguage(audio) {
+async function detectLanguage(audio, hint, detectAt) {
   try {
     const tok = asr.tokenizer;
     // special tokens like <|ar|> live in the tokenizer's "added tokens", not the normal word list
@@ -2008,16 +2033,26 @@ async function detectLanguage(audio) {
     const langs = [];
     for (const c of WHISPER_LANGS) { const id = idOf("<|" + c + "|>"); if (id != null) langs.push([c, id]); }
     if (!langs.length) return null;
-    // start where there's speech: skip leading silence
-    const SR = 16000, win = 30 * SR; let start = 0;
-    for (let i = 0; i < audio.length; i += SR / 10) { let e = 0; for (let k = i; k < Math.min(audio.length, i + SR / 10); k++) e += audio[k] * audio[k]; if (e / (SR / 10) > 1e-4) { start = Math.max(0, i - SR / 2); break; } }
-    const clip = audio.slice(start, start + win);
-    const { input_features } = await asr.processor(clip);
-    const out = await asr.model({ input_features, decoder_input_ids: new Tensor("int64", new BigInt64Array([BigInt(sot)]), [1, 1]) });
-    const logits = out.logits, V = logits.dims.at(-1), data = logits.data;
-    let best = null, bv = -Infinity;
-    for (const [code, id] of langs) { const v = data[data.length - V + id]; if (v > bv) { bv = v; best = code; } }
-    return best;
+    // listen where someone is talking (the app's speech detector tells us), not at a bark or a bang
+    const SR = 16000, win = 30 * SR;
+    let start = Math.max(0, Math.round((detectAt || 0) * SR));
+    if (!detectAt) for (let i = 0; i < audio.length; i += SR / 10) { let e = 0; for (let k = i; k < Math.min(audio.length, i + SR / 10); k++) e += audio[k] * audio[k]; if (e / (SR / 10) > 1e-4) { start = Math.max(0, i - SR / 2); break; } }
+    const starts = [start]; if (audio.length - start > 50 * SR) starts.push(Math.floor((start + audio.length) / 2) - win / 2);  // long video: listen twice
+    const probs = new Map();
+    for (const st of starts) {
+      const { input_features } = await asr.processor(audio.slice(st, st + win));
+      const out = await asr.model({ input_features, decoder_input_ids: new Tensor("int64", new BigInt64Array([BigInt(sot)]), [1, 1]) });
+      const V = out.logits.dims.at(-1), data = out.logits.data, base = data.length - V;
+      let mx = -Infinity; for (const [, id] of langs) mx = Math.max(mx, data[base + id]);
+      let sum = 0; const ex = langs.map(([c, id]) => { const v = Math.exp(data[base + id] - mx); sum += v; return [c, v]; });
+      for (const [c, v] of ex) probs.set(c, (probs.get(c) || 0) + v / sum / starts.length);
+    }
+    const ranked = [...probs].sort((a, b) => b[1] - a[1]), [top, conf] = ranked[0];
+    // not sure? go with the phone's own language if Whisper thinks it's plausible
+    const hp = probs.get(hint) || 0;
+    let lang = top;
+    if (hint && top !== hint && ((conf < 0.6 && hp > 0.1) || conf < 0.35)) lang = hint;
+    return { lang, conf: lang === top ? conf : hp, top: ranked.slice(0, 3).map(([c, p]) => c + " " + Math.round(p * 100) + "%").join(", ") };
   } catch (err) { postMessage({ type: "warn", message: "language check failed: " + (err && err.message || err) }); return null; }
 }
 self.onmessage = async (e) => {
@@ -2036,7 +2071,11 @@ self.onmessage = async (e) => {
     }
     postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
     let lang = language;
-    if (!lang && !e.data.noDetect) { postMessage({ type: "detecting" }); lang = await detectLanguage(audio); postMessage({ type: "detected", lang }); }
+    if (!lang && !e.data.noDetect) {
+      postMessage({ type: "detecting" });
+      const r = await detectLanguage(audio, e.data.hint, e.data.detectAt || 0);
+      lang = r && r.lang; postMessage({ type: "detected", lang, conf: r && r.conf, top: r && r.top });
+    }
     postMessage({ type: "stage" });
     // translate: Whisper writes English captions straight from the foreign speech (skipped if it's already English)
     const opts = { return_timestamps: "word", task: translate && lang !== "en" ? "translate" : "transcribe" };
@@ -2168,19 +2207,12 @@ function checkCrash() {
   if (c.stage === "detecting" && !store.get("coolcaps.noDetect")) {
     // the model loaded fine; it was the language check that crashed. Skip it from now on.
     store.set("coolcaps.noDetect", true);
-    openSheet((sh) => {
-      sh.append(el("span", "tag y", "Fixed it for you"), el("h3", "display", "Pick your video's language"));
-      sh.append(el("p", "sub", "Working out the language automatically uses too much memory on this phone, so Cool Caps will skip that step. Choose the language spoken in your videos, then add your video again."));
-      const sel = el("select", "bigselect"); LANGS.forEach(([v, l]) => { if (!v) return; const o = el("option", "", l); o.value = v; sel.append(o); }); sel.value = APP.lang || "en";
-      const ok = el("button", "btn primary block", "Save and add a video");
-      ok.onclick = () => { APP.lang = sel.value; saveApp(); $("#homeLang").value = APP.lang; $("#langSel").value = APP.lang; closeSheet(); $("#pick").click(); };
-      sh.append(sel, ok);
-    });
+    toast(`Fixed: the automatic language check is too heavy for this phone, so Cool Caps now uses your phone's language (${langName(phoneLang())}). Tap the language on a video to change it.`);
     return;
   }
-  const order = ["base", "small", "medium", "max"], was = c.model || APP.model, i = order.indexOf(was);
+  const order = ["base", "small", "medium", "max"], was = c.model || chosenModel(), i = order.indexOf(was);
   const lighter = i > 0 ? order[i - 1] : null;
-  if (lighter) { APP.model = lighter; saveApp(); syncSettings(); }
+  if (lighter) { APP.model = lighter; APP.modelPicked = true; saveApp(); syncSettings(); }
   const where = { loading: "while loading the speech model", loaded: "right after loading the speech model", detecting: "while checking the language", transcribing: "while writing the captions" }[c.stage] || "";
   openSheet((sh) => {
     sh.append(el("span", "tag y", "Fixed it for you"), el("h3", "display", "Your phone ran out of memory"));
@@ -2193,9 +2225,22 @@ function checkCrash() {
     sh.append(ok, later);
   });
 }
-let detectedLang = "", detectFailed = false, lastEngine = "";
+let detectedLang = "", detectFailed = false, lastEngine = "", detectConf = 1, oneOffLang = null, lastTop = "";
+// Accuracy picks itself unless the user chose one: phones with plenty of memory get the more accurate model
+function chosenModel() {
+  if (APP.modelPicked) return APP.model;
+  if (IS_IOS) return "small";
+  const mem = navigator.deviceMemory || 4, cores = navigator.hardwareConcurrency || 4;
+  return mem >= 6 && cores >= 6 ? "medium" : "small";
+}
+// the phone's own language, as a Whisper language code
+function phoneLang() {
+  const raw = String((navigator.languages && navigator.languages[0]) || navigator.language || "en").toLowerCase();
+  let c = raw.split(/[-_]/)[0]; c = { iw: "he", in: "id", jv: "jw", nb: "no", fil: "tl" }[c] || c;
+  return LANGS.some((l) => l[0] === c) ? c : "en";
+}
 const langName = (c) => (LANGS.find((l) => l[0] === c) || [, c])[1];
-function transcribe(audio, onStatus) {
+function transcribe(audio, onStatus, opts2 = {}) {
   detectedLang = ""; detectFailed = false;
   if (FAKE) return fetch("words.json").then((r) => r.json());
   return new Promise((resolve, reject) => {
@@ -2223,7 +2268,7 @@ function transcribe(audio, onStatus) {
         }
       } else if (m.type === "detecting") inflight({ stage: "detecting" }), onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
       else if (m.type === "detected" && !m.lang) { detectFailed = true; }
-      else if (m.type === "detected") { detectedLang = m.lang; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
+      else if (m.type === "detected") { detectedLang = m.lang; detectConf = m.conf == null ? 1 : m.conf; lastTop = m.top || ""; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
       else if (m.type === "warn") console.warn(m.message);
       else if (m.type === "device") inflight({ stage: "loaded" }), lastEngine = m.device + (m.threads > 1 ? "×" + m.threads : ""), devKind = m.device, engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
       else if (m.type === "chunk") {
@@ -2236,7 +2281,7 @@ function transcribe(audio, onStatus) {
       else if (m.type === "stage") {
         inflight({ stage: "transcribing" });
         tStage = performance.now();
-        rateKey = (APP.model || "small") + "|" + devKind;
+        rateKey = chosenModel() + "|" + devKind;
         est = Math.max(3, len * (Number(store.get("coolcaps.rate." + rateKey)) || GUESS_RATE[rateKey] || 0.6));
         tick(); timer = setInterval(tick, 1000);
       } else if (m.type === "done") {
@@ -2248,14 +2293,15 @@ function transcribe(audio, onStatus) {
     };
     w.onerror = (e) => { finish(); inflight(null); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
     const translate = APP.out === "en";
-    let mkey = translate && APP.model === "max" ? "medium" : APP.model;  // Max can't translate
+    let mkey = chosenModel(); if (translate && mkey === "max") mkey = "medium";  // Max can't translate
     if (IS_IOS && (mkey === "medium" || mkey === "max")) mkey = "small";  // iPhones give web pages too little memory for the big models
     inflight({ model: mkey, stage: "loading", ios: IS_IOS });
     // phones where the language check crashed: skip it and use the language picked on the home screen (or English)
-    const noDetect = !!store.get("coolcaps.noDetect");
-    const language = APP.lang || (noDetect ? "en" : null);
-    if (noDetect && !APP.lang) detectFailed = true;
-    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language, cpu: APP.engine !== "gpu", translate, noDetect }, [audio.buffer]);
+    // iPhones: the language check is the step that runs out of memory, so skip it and use the phone's language
+    const noDetect = !!store.get("coolcaps.noDetect") || IS_IOS;
+    const forced = oneOffLang || APP.lang;
+    const language = forced || (noDetect ? phoneLang() : null);
+    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language, cpu: APP.engine !== "gpu", translate, noDetect, hint: phoneLang(), detectAt: opts2.detectAt || 0 }, [audio.buffer]);
   });
 }
 let objectURL = null, token = 0, wakeLock = null;
@@ -2265,7 +2311,7 @@ async function keepAwake(on) {
 async function startFile(file) {
   const my = ++token;
   words = []; history = []; job = null; lastWord = lastRow = -1;
-  $("#transcript").textContent = "";
+  $("#transcript").textContent = ""; $("#langBar").hidden = true;
   if (objectURL) URL.revokeObjectURL(objectURL);
   objectURL = URL.createObjectURL(file); video.src = objectURL; currentFile = file;
   $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
@@ -2288,20 +2334,69 @@ async function startFile(file) {
   const meta = { id: Date.now().toString(36), name: file.name, duration: video.duration || audio.length / 16000, width: video.videoWidth || 1080, height: video.videoHeight || 1920 };
   let ws;
   const keep = audio.slice();  // the original goes to the speech engine; this copy measures loudness and voices
-  try { ws = await transcribe(audio, (st) => { if (my === token) setWorking(true, st); }); }
+  let speech = null, vadNote = "detector off";
+  if (APP.vad !== false && !FAKE) {
+    try {
+      speech = findSpeech(keep);
+      if (!speech || speech.flat) vadNote = "detector: no clear speech/background difference, used everything";
+      else if (speech.coverage < 0.02 || !speech.segs.length) { vadNote = `detector found almost no talking (${Math.round(speech.coverage * 100)}%), used everything`; speech = null; }
+      else vadNote = `detector: ${speech.segs.length} talking parts, ${Math.round(speech.coverage * 100)}% of the video`;
+      if (speech && speech.flat) speech = null;
+    } catch (e) { speech = null; vadNote = "detector failed: " + e.message; }
+  }
+  const status = (st) => { if (my === token) setWorking(true, st); };
+  let cloudNote = "";
+  if (useCloud()) {
+    // the most accurate way, and it works on every phone; falls back to the phone if the cloud can't be reached
+    const t0 = performance.now(), forced = oneOffLang || APP.lang || "";
+    try {
+      const cp = speech && speech.coverage < 0.9 ? compactSpeech(keep, speech.segs) : null;
+      const r = await cloudTranscribe(cp ? cp.audio : keep, status, { language: forced, translate: APP.out === "en" });
+      ws = cp ? r.words.map((w) => { const s0 = mapBack(w.start, cp.map); return { ...w, start: s0, end: Math.max(s0 + 0.05, mapBack(w.end, cp.map)) }; }) : r.words;
+      if (!ws.length && cp) { const r2 = await cloudTranscribe(keep, status, { language: forced, translate: APP.out === "en" }); ws = r2.words; r.lang = r.lang || r2.lang; }
+      detectedLang = forced || r.lang || ""; detectConf = 1; lastTop = ""; detectFailed = false; lastEngine = "cloud";
+      cloudNote = `cloud ${((performance.now() - t0) / 1000).toFixed(1)}s`;
+    } catch (e) {
+      if (my !== token) return;
+      logProblem("cloud: " + e.message);
+      if (IS_IOS || !e.offline) {
+        if (e.status === 429 || !e.offline) { setWorking(true, { stage: "Couldn't make the captions", note: e.message, error: true }); keepAwake(false); return; }
+        setWorking(true, { stage: "No internet", note: "Cool Caps needs the internet to write captions on iPhone. Connect and try again.", error: true }); keepAwake(false); return;
+      }
+      toast("Couldn't reach the cloud, so the captions are being made on this phone instead.", true);
+      cloudNote = "cloud failed, used phone";
+    }
+  }
+  try {
+    if (ws) { /* done in the cloud */ }
+    else if (speech && speech.coverage < 0.9) {
+      // only the talking parts go to Whisper; then every word's time is put back on the original timeline
+      const cp = compactSpeech(keep, speech.segs);
+      ws = await transcribe(cp.audio, status, { detectAt: 0 });
+      ws = (ws || []).map((w) => { const s0 = mapBack(w.start, cp.map), s1 = Math.max(s0 + 0.05, mapBack(w.end, cp.map)); return { ...w, start: s0, end: s1 }; });
+      if (!ws.filter((w) => String(w.word).trim()).length) { vadNote += ", found nothing so retried with everything"; ws = await transcribe(keep.slice(), status); }
+    } else {
+      const longest = speech && speech.segs && speech.segs.slice().sort((x, y) => (y.e - y.s) - (x.e - x.s))[0];
+      ws = await transcribe(audio, status, { detectAt: longest ? longest.s : 0 });
+    }
+  }
   catch (e) { if (my === token) setWorking(true, { stage: "Couldn't transcribe", note: e.message, error: true }); keepAwake(false); return; }
   keepAwake(false);
   if (my !== token) return;
   ws = (ws || []).filter((w) => String(w.word).trim());
-  if (!ws.length) { logProblem(`no words · ${audioReport} · ${APP.model}/${lastEngine || "?"}`); return setWorking(true, { stage: "No words found", note: "Couldn't hear any speech in this video.", error: true }); }
+  if (speech) { const d = dropPhantoms(ws, speech.segs); ws = d.words; if (d.dropped) vadNote += `, dropped ${d.dropped} made-up word${d.dropped > 1 ? "s" : ""}`; }
+  if (!ws.length) { logProblem(`no words · ${audioReport} · ${vadNote} · ${chosenModel()}/${lastEngine || "?"}`); return setWorking(true, { stage: "No words found", note: "Couldn't hear any speech in this video.", error: true }); }
   const fixed = repairTimings(ws, meta.duration, keep);
   ws = fixed.words;
   try { meta.voices = analyzeVoice(keep, ws); } catch (e) { logProblem("voice analysis: " + e.message); }
   meta.timingFixed = fixed.fixed;
+  meta.lang = oneOffLang || APP.lang || detectedLang || (store.get("coolcaps.noDetect") || IS_IOS ? phoneLang() : "");
+  meta.langForced = !!(oneOffLang || APP.lang); meta.langConf = detectConf; meta.langTop = lastTop;
+  oneOffLang = null;
   try {
     const W = ws, first = W[0], last = W[W.length - 1];
-    logProblem(`video ${meta.duration.toFixed(1)}s ${meta.width}x${meta.height} · ${audioReport} · ${W.length} words ${first.start.toFixed(1)}→${last.end.toFixed(1)}s` +
-      ` · ${APP.model}/${lastEngine || "?"} · lang ${detectedLang || APP.lang || "auto"}${fixed.fixed ? " · TIMINGS REPAIRED" : ""} · "${W.slice(0, 6).map((w) => w.word).join(" ").slice(0, 60)}"`);
+    logProblem(`video ${meta.duration.toFixed(1)}s ${meta.width}x${meta.height} · ${audioReport} · ${vadNote}${cloudNote ? " · " + cloudNote : ""} · ${W.length} words ${first.start.toFixed(1)}→${last.end.toFixed(1)}s` +
+      ` · ${chosenModel()}${APP.modelPicked ? "" : "(auto)"}/${lastEngine || "?"} · lang ${meta.lang || "auto"}${detectedLang && !meta.langForced ? " " + Math.round(detectConf * 100) + "% [" + lastTop + "]" : ""}${fixed.fixed ? " · TIMINGS REPAIRED" : ""} · "${W.slice(0, 6).map((w) => w.word).join(" ").slice(0, 60)}"`);
   } catch {}
   onTranscribed({ ...meta, words: ws });
 }
@@ -2346,6 +2441,94 @@ function analyzeVoice(a, ws) {
   ws.forEach((w, i) => { let a1 = 0, a0 = 0; for (let k = Math.max(0, i - 3); k <= Math.min(ws.length - 1, i + 3); k++) { if (raw[k] === 1) a1++; else if (raw[k] === 0) a0++; } w.voice = a1 > a0 ? 1 : 0; });
   return 2;
 }
+/* ===================== cloud transcription =====================
+   Sends just the sound (16 kHz mono WAV, about 2 MB a minute) to your Cloudflare Worker, which asks
+   Whisper large-v3 for the words with their timings. Long videos go up in 10-minute pieces. */
+const useCloud = () => !!CLOUD_URL && APP.cloud !== false;
+function wavOf(a) {
+  const n = a.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE"); str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 16000, true); v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const x = Math.max(-1, Math.min(1, a[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
+  return new Blob([buf], { type: "audio/wav" });
+}
+function cloudPost(blob, fields, onUp) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData(); fd.append("file", blob, "audio.wav"); for (const [k, v] of Object.entries(fields)) if (v) fd.append(k, v);
+    const x = new XMLHttpRequest(); x.open("POST", CLOUD_URL); x.timeout = 180000;
+    x.upload.onprogress = (e) => e.lengthComputable && onUp(e.loaded / e.total);
+    x.onload = () => { let d = null; try { d = JSON.parse(x.responseText); } catch {} if (x.status >= 200 && x.status < 300 && d) resolve(d); else { const err = new Error((d && d.error) || "The cloud said no (" + x.status + ")."); err.status = x.status; reject(err); } };
+    x.onerror = () => reject(Object.assign(new Error("Couldn't reach the cloud. Check your internet."), { offline: true }));
+    x.ontimeout = () => reject(Object.assign(new Error("The cloud took too long to answer."), { offline: true }));
+    x.send(fd);
+  });
+}
+const langCode = (name) => { const n = String(name || "").toLowerCase(); if (!n) return ""; if (LANGS.some((l) => l[0] === n)) return n; const f = LANGS.find((l) => l[1].toLowerCase() === n); return f ? f[0] : ""; };
+async function cloudTranscribe(audio, onStatus, { language, translate } = {}) {
+  const SR = 16000, PIECE = 600 * SR, pieces = [];
+  for (let p = 0; p < audio.length; p += PIECE) pieces.push([p, audio.subarray(p, Math.min(audio.length, p + PIECE))]);
+  const words = []; let lang = "", t0 = performance.now();
+  for (let k = 0; k < pieces.length; k++) {
+    const [off, part] = pieces[k], blob = wavOf(part), mbs = (blob.size / 1e6).toFixed(1), tag = pieces.length > 1 ? ` (part ${k + 1} of ${pieces.length})` : "";
+    onStatus({ pct: 0, stage: "Sending the sound" + tag, note: `${mbs} MB · it's sent securely to write the captions and isn't kept.`, cancel: true });
+    const tick = setInterval(() => onStatus({ pct: null, stage: "Writing your captions" + tag, note: `Usually takes a few seconds · ${Math.round((performance.now() - t0) / 1000)}s`, cancel: true }), 1000);
+    let d;
+    try {
+      d = await cloudPost(blob, { language: language || lang || "", task: translate ? "translate" : "" }, (f) => {
+        if (f < 1) onStatus({ pct: f, stage: "Sending the sound" + tag, note: `${mbs} MB · it's sent securely to write the captions and isn't kept.`, cancel: true });
+      });
+    } finally { clearInterval(tick); }
+    if (!lang) lang = langCode(d.language);
+    for (const w of d.words || []) if (String(w.word).trim()) words.push({ word: String(w.word).trim(), start: +w.start + off / SR, end: +w.end + off / SR });
+  }
+  return { words: splitLongWords(words), lang };
+}
+
+/* ===================== speech detector =====================
+   Finds where someone is talking from the sound's loudness, measured every 20 ms against this video's own
+   background level. Whisper only gets those parts (less noise to invent words from, and less to process),
+   and words it "hears" where nobody is talking are dropped. No download needed. */
+function findSpeech(a) {
+  const SR = 16000, F = 320, n = Math.floor(a.length / F);
+  if (n < 10) return null;
+  const db = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let e = 0; for (let k = i * F; k < (i + 1) * F; k++) e += a[k] * a[k]; db[i] = 10 * Math.log10(e / F + 1e-12); }
+  const sorted = Array.from(db).sort((x, y) => x - y), floor = sorted[Math.floor(n * 0.1)], peak = sorted[Math.floor(n * 0.97)];
+  if (peak - floor < 6) return { segs: [{ s: 0, e: a.length / SR }], coverage: 1, flat: true };   // no clear quiet/loud difference: don't guess
+  // talking is well above the background AND not too far below the loudest talking (steady TV/fan noise sits lower)
+  const thr = Math.max(floor + Math.min(12, (peak - floor) * 0.35), peak - 22, -60);
+  const on = Array.from(db, (v) => v > thr);
+  // close short gaps (between words), then drop tiny blips
+  const fill = (arr, len, val) => { let i = 0; while (i < arr.length) { if (arr[i] !== val) { let j = i; while (j < arr.length && arr[j] !== val) j++; if (i > 0 && j < arr.length && j - i <= len) for (let k = i; k < j; k++) arr[k] = val; i = j; } else i++; } };
+  fill(on, 20, true);   // gaps up to 0.4 s
+  const segs = []; let i = 0;
+  while (i < n) { if (on[i]) { let j = i; while (j < n && on[j]) j++; if (j - i >= 8) segs.push({ s: i * F / SR, e: j * F / SR }); i = j; } else i++; }   // at least 0.16 s
+  // pad each part so word edges aren't cut, and merge overlaps
+  const dur = a.length / SR, out = [];
+  for (const g of segs) { const s0 = Math.max(0, g.s - 0.3), e0 = Math.min(dur, g.e + 0.35); if (out.length && s0 <= out[out.length - 1].e + 0.2) out[out.length - 1].e = e0; else out.push({ s: s0, e: e0 }); }
+  const covered = out.reduce((t, g) => t + g.e - g.s, 0);
+  return { segs: out, coverage: covered / dur, floor, peak, thr };
+}
+// stitch the talking parts together (with a short gap between), and remember where each part came from
+function compactSpeech(a, segs) {
+  const SR = 16000, GAP = Math.round(0.3 * SR), map = []; let len = 0;
+  for (const g of segs) { const n0 = Math.round(g.s * SR), n1 = Math.round(g.e * SR); map.push({ c: len / SR, s: g.s, e: g.e }); len += (n1 - n0) + GAP; }
+  const out = new Float32Array(len); let o = 0;
+  for (const g of segs) { const n0 = Math.round(g.s * SR), n1 = Math.round(g.e * SR); out.set(a.subarray(n0, n1), o); o += (n1 - n0) + GAP; }
+  return { audio: out, map };
+}
+function mapBack(t, map) {
+  let m = map[0]; for (const x of map) { if (x.c <= t) m = x; else break; }
+  return Math.min(m.e, m.s + Math.max(0, t - m.c));
+}
+// drop words that sit where nobody is talking (Whisper makes these up from noise)
+function dropPhantoms(ws, segs) {
+  const inSpeech = (w) => segs.some((g) => w.end > g.s - 0.25 && w.start < g.e + 0.25);
+  const kept = ws.filter(inSpeech);
+  return kept.length >= ws.length * 0.6 ? { words: kept, dropped: ws.length - kept.length } : { words: ws, dropped: 0 };  // removing too many? the detector is probably wrong, so keep all
+}
+
 /* The speech model sometimes returns odd timings, especially with noisy videos (music, TV, pets): missing
    numbers, every word at the same moment, or times past the end of the video. Captions with bad times never
    show up. So check them, and if they're broken, spread the words over the part of the video with sound. */
@@ -2392,22 +2575,39 @@ function logProblem(msg) {
 window.addEventListener("error", (e) => logProblem("error: " + (e.message || e.type) + (e.filename ? " @" + String(e.filename).split("/").pop() + ":" + e.lineno : "")));
 window.addEventListener("unhandledrejection", (e) => logProblem("promise: " + ((e.reason && (e.reason.message || e.reason)) || "?")));
 let currentFile = null;
+function showLangBar(j) {
+  const bar = $("#langBar"), lang = j.lang;
+  if (!lang) { bar.hidden = true; return; }
+  const unsure = !j.langForced && (lang !== phoneLang() || (j.langConf != null && j.langConf < 0.6));
+  bar.hidden = false; bar.classList.toggle("warn", unsure);
+  bar.innerHTML = `🌐 ${langName(lang)}${unsure ? " · <u>Wrong? Tap</u>" : ""}`;
+  bar.onclick = () => openSheet((sh) => {
+    sh.append(el("h3", "display", "What language is spoken?"), el("p", "sub", `Cool Caps heard ${langName(lang)}. Pick the right one and the captions are redone.`));
+    const quick = [...new Set([phoneLang(), "en", lang, "ar", "es", "fr", "hi", "pt", "de", "it", "tr", "zh"])].slice(0, 10);
+    const grid = el("div", "langgrid");
+    const redo = (code) => { closeSheet(); oneOffLang = code; toast(`Redoing the captions in ${langName(code)}…`); startFile(currentFile); };
+    quick.forEach((c) => { const b = el("button", "btn " + (c === lang ? "primary" : "ghost"), langName(c)); b.onclick = () => (c === lang ? closeSheet() : redo(c)); grid.append(b); });
+    const sel = el("select", "bigselect"); const o0 = el("option", "", "Another language…"); o0.value = ""; sel.append(o0);
+    LANGS.forEach(([v, l]) => { if (v) { const o = el("option", "", l); o.value = v; sel.append(o); } });
+    sel.onchange = () => sel.value && redo(sel.value);
+    sh.append(grid, sel);
+  });
+}
 function onTranscribed(j) {
   job = j; words = j.words.map((w) => ({ ...w }));
   videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
-  setWorking(false); refreshAll(true);
+  setWorking(false); refreshAll(true); showLangBar(j);
   if (j.timingFixed) toast("The timing came back scrambled (common with background noise), so the words are spread over the video. Check them in Edit words.", true);
-  else if (detectFailed) toast("Couldn't tell the language, so it guessed English. If that's wrong, pick the language on the home screen and add the video again.", true);
-  else if (APP.out === "en" && (detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en") toast(`${words.length} words · translated from ${langName(detectedLang || APP.lang)} to English. Word timing can be a little looser when translating.`);
-  else if ((detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en" && APP.model !== "max") toast(`${words.length} words · ${langName(detectedLang || APP.lang)}. Not quite right? Settings → Accuracy → Max is much better for this language.`, true);
+  else if (detectFailed) toast("Couldn't tell the language, so it used your phone's language. Wrong? Tap the language at the top of the video.", true);
+  else if (APP.out === "en" && (detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en") toast(`${words.length} words · translated from ${langName(detectedLang || APP.lang)} to English.` + (lastEngine === "cloud" ? "" : " Word timing can be a little looser when translating."));
   else toast(`${words.length} words transcribed` + (detectedLang ? ` · ${langName(detectedLang)}` : ""));
   if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
 }
 $("#wBack").onclick = () => { token++; resetWorker(); keepAwake(false); go("home"); };
 // Stuck on the graphics chip? Start again on the processor with the Fast model (works on every phone).
 $("#wSwitch").onclick = () => {
-  resetWorker(); APP.engine = "cpu"; if (APP.model === "medium") APP.model = "small"; saveApp();
+  resetWorker(); APP.engine = "cpu"; if (chosenModel() === "medium" || chosenModel() === "max") { APP.model = "small"; APP.modelPicked = true; } saveApp();
   toast("Switched to the processor. Starting again…");
   if (currentFile) startFile(currentFile);
 };

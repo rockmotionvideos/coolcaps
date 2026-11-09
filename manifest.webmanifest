@@ -1,14 +1,26 @@
 {
   "id": "./",
-  "name": "Cool Caps",
+  "name": "Cool Caps: Animated Captions",
   "short_name": "Cool Caps",
-  "description": "Animated captions for your short videos, made on your phone",
+  "description": "Animated, trendy captions for your short videos. Pick a style, choose how many words show on screen, and export. Made on your phone.",
+  "lang": "en",
+  "dir": "auto",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
   "orientation": "portrait",
   "background_color": "#0B0A0F",
   "theme_color": "#0B0A0F",
+  "categories": [
+    "photo",
+    "video",
+    "productivity",
+    "social"
+  ],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "coolcaps-icon-192.png",
@@ -26,6 +38,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "store-shot-1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Captions that pop"
+    },
+    {
+      "src": "store-shot-2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Choose how many words show on screen"
     }
   ]
 }
