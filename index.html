@@ -368,6 +368,18 @@ button.row.linkrow { width: 100%; text-align: left; background: none; border: 0;
 .pwprice b { font-size: 44px; font-weight: 400; line-height: 1; }
 .pwprice span { color: var(--muted, #9a9a9a); font-size: 14px; }
 .pwkey { display: flex; flex-direction: column; gap: 10px; }
+.plans { display: flex; flex-direction: column; gap: 10px; }
+.plan { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px 16px; border-radius: 18px; background: var(--raised-2); border: 1.5px solid var(--line-2); color: inherit; font: 500 15px var(--ui); cursor: pointer; }
+.plan .rad { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid var(--line-2); }
+.plan .pl { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.plan .pl b { font: 800 17px var(--ui); }
+.plan .pl small { color: var(--muted, #9a9a9a); font-size: 13px; }
+.plan .pr { text-align: right; display: flex; flex-direction: column; gap: 2px; }
+.plan .pr b { font: 800 17px var(--ui); }
+.plan .pr small { color: var(--muted, #9a9a9a); font-size: 12px; }
+.plan .best { position: absolute; top: -10px; right: 14px; padding: 3px 8px; border-radius: 7px; font: 800 10px/1.2 var(--ui); letter-spacing: .06em; text-transform: uppercase; background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; }
+.plan.on { border-color: var(--accent); background: rgba(255, 225, 77, .08); }
+.plan.on .rad { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 4px var(--raised-2); }
 .pwkey[hidden] { display: none; }
 .pwmsg.bad { color: #FF6B81; }
 .linkbtn { background: none; border: 0; color: inherit; opacity: .7; font: 600 15px var(--ui); padding: 6px; cursor: pointer; }
@@ -910,8 +922,9 @@ const PRO_PRICE_NOTE = "one-time · yours forever";
 const LS_API = "https://api.lemonsqueezy.com/v1/licenses/";
 const PRO = new Set([...Object.keys(STYLE_GROUPS[1][2]), ...Object.keys(KIN)]);
 const LIC_KEY = "coolcaps.pro";
+let PLAYST = (() => { try { return JSON.parse(localStorage.getItem("coolcaps.play")) || {}; } catch { return {}; } })();
 let LIC = (() => { try { return JSON.parse(localStorage.getItem(LIC_KEY)) || null; } catch { return null; } })();
-const isPro = () => !LOCK_PRO || !!(LIC && LIC.ok);
+const isPro = () => PLAYST.app ? !!PLAYST.pro : (!LOCK_PRO || !!(LIC && LIC.ok));
 const isLocked = (style) => !isPro() && PRO.has(style);
 function saveLic(v) { LIC = v; try { v ? localStorage.setItem(LIC_KEY, JSON.stringify(v)) : localStorage.removeItem(LIC_KEY); } catch {} }
 async function lsCall(action, fields) {
@@ -946,6 +959,67 @@ async function removeKey() {
   saveLic(null);
 }
 const maskKey = (k) => k ? k.slice(0, 4) + "••••" + k.slice(-4) : "";
+/* ===================== Google Play Billing =====================
+   Inside the Play Store app, Pro is a Google Play subscription. Create these three
+   subscriptions in Play Console (Monetize with Play > Products > Subscriptions), each with one
+   base plan. The ids below must match exactly. The website (and iPhone) keep the free launch special. */
+const PLAY_PKG = "com.rockmotionvideos.coolcaps";
+const PLAY_METHOD = "https://play.google.com/billing";
+const PLAY_SUBS = [
+  { id: "coolcaps_pro_monthly", name: "Monthly", per: "month", months: 1, fallback: "A$7.99" },
+  { id: "coolcaps_pro_6months", name: "6 months", per: "6 months", months: 6, fallback: "A$24.99" },
+  { id: "coolcaps_pro_yearly", name: "Yearly", per: "year", months: 12, fallback: "A$39.99", best: true },
+];
+const PLAY_KEY = "coolcaps.play";
+let PLAY = null, PLAY_ITEMS = {};
+const inPlayApp = () => !!PLAYST.app;
+function savePlay(v) { PLAYST = v; store.set(PLAY_KEY, v); }
+function money(m) {
+  if (!m) return "";
+  try { return new Intl.NumberFormat(navigator.language || "en-AU", { style: "currency", currency: m.currency }).format(+m.value); }
+  catch { return m.currency + " " + (+m.value).toFixed(2); }
+}
+function trialText(iso) {
+  const m = /^P(?:(\d+)W)?(?:(\d+)D)?$/.exec(iso || ""); if (!m) return "";
+  const d = (+m[1] || 0) * 7 + (+m[2] || 0); return d ? `${d}-day free trial` : "";
+}
+async function syncPlay() {
+  if (!PLAY) return;
+  try {
+    const list = await PLAY.listPurchases();
+    const own = (list || []).find((p) => PLAY_SUBS.some((s) => s.id === p.itemId));
+    savePlay({ ...PLAYST, app: true, pro: !!own, sku: own ? own.itemId : "", checked: Date.now() });
+  } catch {}                                     // offline: keep what we knew
+}
+async function initPlay() {
+  if (!("getDigitalGoodsService" in window)) return;
+  try { PLAY = await window.getDigitalGoodsService(PLAY_METHOD); } catch { PLAY = null; }
+  if (!PLAY) return;
+  savePlay({ ...PLAYST, app: true });
+  try { (await PLAY.getDetails(PLAY_SUBS.map((s) => s.id))).forEach((d) => (PLAY_ITEMS[d.itemId] = d)); } catch {}
+  await syncPlay();
+  refreshPlan();
+}
+async function buyPlay(id) {
+  if (!PLAY) throw new Error("Google Play isn't available right now. Check your internet and try again.");
+  const req = new PaymentRequest([{ supportedMethods: PLAY_METHOD, data: { sku: id } }], { total: { label: "Total", amount: { currency: "AUD", value: "0" } } });
+  const res = await req.show();
+  try { await res.complete("success"); } catch {}
+  await syncPlay();
+  if (!PLAYST.pro && res.details && res.details.purchaseToken) savePlay({ ...PLAYST, pro: true, sku: id, checked: Date.now() });
+  return PLAYST.pro;
+}
+function planPrice(s) { const d = PLAY_ITEMS[s.id]; return d && d.price ? money(d.price) : s.fallback; }
+function planMonthly(s) {
+  const d = PLAY_ITEMS[s.id]; if (!d || !d.price) return null;
+  return { currency: d.price.currency, value: +d.price.value / s.months };
+}
+function planSave(s) {
+  const mo = PLAY_SUBS.find((x) => x.months === 1), a = planMonthly(s), b = planMonthly(mo);
+  if (!a || !b || s.months === 1 || a.currency !== b.currency || !b.value) return 0;
+  return Math.round((1 - a.value / b.value) * 100);
+}
+const manageSubUrl = () => `https://play.google.com/store/account/subscriptions?package=${PLAY_PKG}` + (PLAYST.sku ? `&sku=${PLAYST.sku}` : "");
 // "Made with Cool Caps" tag on Free exports (and the preview, so there are no surprises)
 function drawWatermark(ctx, vw, vh) {
   if (isPro()) return;
@@ -1473,7 +1547,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.5 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.6 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1720,9 +1794,59 @@ function openSheet(build) {
 }
 function closeSheet() { const v = $("#veil"); if (v) { v.querySelectorAll("video").forEach((x) => x.pause()); v.remove(); } }
 
+function playPaywall(sh, style) {
+  if (isPro()) {
+    sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Pro is on"));
+    const cur = PLAY_SUBS.find((s) => s.id === PLAYST.sku);
+    sh.append(el("p", "sub", "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." + (cur ? ` Your plan: ${cur.name}.` : "")));
+    const man = el("button", "btn ghost block", "Manage subscription"); man.onclick = () => window.open(manageSubUrl(), "_blank", "noopener");
+    const ok = el("button", "btn primary block", "Close"); ok.onclick = closeSheet;
+    sh.append(man, ok, el("p", "fine", "Cancel or change your plan any time in Google Play."));
+    return;
+  }
+  sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Unlock every style"));
+  sh.append(el("p", "sub", style === "max" ? "Max quality exports are part of Pro." : style ? `"${style[0].toUpperCase() + style.slice(1)}" is a Pro animation.` : "Get the full creative toolkit."));
+  const ul = el("ul", "pwlist");
+  [`All ${PRO.size} Trendy and Kinetic animations`, "No watermark on your videos", "Max quality exports", "Every new style we add"].forEach((x) => ul.append(el("li", "", x)));
+  let pick = PLAY_SUBS.find((s) => s.best).id;
+  const plans = el("div", "plans"), buy = el("button", "btn primary block", ""), msg = el("p", "sub pwmsg", "");
+  const label = () => {
+    const d = PLAY_ITEMS[pick], t = d && trialText(d.freeTrialPeriod);
+    buy.textContent = t ? `Start ${t}` : "Continue";
+  };
+  PLAY_SUBS.forEach((s) => {
+    const b = el("button", "plan" + (s.id === pick ? " on" : "")), d = PLAY_ITEMS[s.id];
+    const left = el("span", "pl"), right = el("span", "pr"), sv = planSave(s), mo = planMonthly(s), t = d && trialText(d.freeTrialPeriod);
+    left.append(el("b", "", s.name), el("small", "", t ? t + ", then billed every " + s.per : "Billed every " + s.per));
+    right.append(el("b", "", planPrice(s)), el("small", "", s.months > 1 && mo ? money(mo) + "/mo" : "per " + s.per));
+    b.append(el("span", "rad"), left, right);
+    if (s.best) b.append(el("span", "best", sv ? `Best value · save ${sv}%` : "Best value"));
+    else if (sv) b.append(el("span", "best", `Save ${sv}%`));
+    b.onclick = () => { pick = s.id; plans.querySelectorAll(".plan").forEach((x) => x.classList.toggle("on", x === b)); label(); };
+    plans.append(b);
+  });
+  label();
+  buy.onclick = async () => {
+    buy.disabled = true; msg.textContent = ""; msg.classList.remove("bad");
+    try {
+      if (await buyPlay(pick)) { closeSheet(); refreshPlan(); toast("Pro unlocked. Enjoy!"); try { confetti(); } catch {} return; }
+      msg.textContent = "The purchase didn't go through. You haven't been charged."; msg.classList.add("bad");
+    } catch (e) {
+      if (!(e && e.name === "AbortError")) { msg.textContent = (e && e.message) || "Something went wrong. Try again."; msg.classList.add("bad"); }
+    }
+    buy.disabled = false; label();
+  };
+  const restore = el("button", "linkbtn", "Restore purchase");
+  restore.onclick = async () => { restore.disabled = true; await syncPlay(); restore.disabled = false; if (isPro()) { closeSheet(); refreshPlan(); toast("Pro restored. Welcome back!"); } else toast("No active Pro subscription on this Google account.", true); };
+  const later = el("button", "linkbtn", "Keep using Free"); later.onclick = closeSheet;
+  sh.append(ul, plans, buy, msg, later, restore);
+  sh.append(el("p", "fine", "Renews automatically until you cancel. Cancel any time in Google Play, at least 24 hours before it renews. Payment is charged to your Google Play account."));
+  const links = el("p", "fine", ""); sh.append(links); links.innerHTML = '<a href="terms.html" target="_blank">Terms</a> · <a href="privacy.html" target="_blank">Privacy</a>';
+}
 function paywall(style) {
   openSheet((sh) => {
     sh.classList.add("pw");
+    if (inPlayApp()) return playPaywall(sh, style);
     if (isPro()) {
       sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Pro is on"));
       sh.append(el("p", "sub", LOCK_PRO ? "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." : "Launch special: every style, no watermark and Max quality are free for now. Enjoy!"));
@@ -1764,7 +1888,8 @@ function paywall(style) {
   });
 }
 function refreshPlan() {
-  const n = $("#planNote"); if (n) n.textContent = !LOCK_PRO ? "Launch special: every Pro style is free for now 🎉" : isPro() ? "Pro is on. Thank you!" : `Free plan · unlock everything for ${PRO_PRICE}`;
+  const mo = PLAY_SUBS.find((s) => s.best), pm = mo && planMonthly(mo);
+  const n = $("#planNote"); if (n) n.textContent = inPlayApp() ? (isPro() ? "Pro is on. Thank you!" : `Free plan · Pro from ${pm ? money(pm) : "A$3.33"}/month`) : !LOCK_PRO ? "Launch special: every Pro style is free for now 🎉" : isPro() ? "Pro is on. Thank you!" : `Free plan · unlock everything for ${PRO_PRICE}`;
   document.body.classList.toggle("is-pro", isPro());
   if (typeof syncSettings === "function") try { syncSettings(); } catch {}
   if (main && typeof video !== "undefined") try { main.render(video.currentTime); } catch {}
@@ -1817,7 +1942,7 @@ function buildSettings() {
   $("#stFonts").textContent = `${INFO.fonts.length} fonts`;
   $("#stVer").textContent = "Version " + (INFO.version || "1");
   $("#planRow").onclick = () => paywall(null);
-  refreshPlan(); recheckLicense(); renderStats(); setTimeout(checkSharedStyle, 400);
+  refreshPlan(); recheckLicense(); initPlay(); renderStats(); setTimeout(checkSharedStyle, 400);
   const probs = () => { try { return JSON.parse(localStorage.getItem(PROB_KEY) || "[]"); } catch { return []; } };
   const syncProb = () => { const n = probs().length; $("#probNote").textContent = n ? `${n} note${n > 1 ? "s" : ""}. Tap to see, copy and send them` : "Notes about each video, to help fix problems"; };
   syncProb(); $("#probRow").addEventListener("focus", syncProb);
