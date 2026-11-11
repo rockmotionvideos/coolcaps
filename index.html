@@ -1565,7 +1565,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.7 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.8 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -2771,6 +2771,8 @@ function showLangBar(j) {
 function onTranscribed(j) {
   job = j; words = j.words.map((w) => ({ ...w }));
   resetWorker();  // captions are written: unload the speech engine so the preview and export get the phone's memory
+  // give the preview a fresh start now the heavy work is over (a player opened while the phone was busy can be half-broken)
+  if (objectURL) { pvFor = objectURL; pvTries = 0; restartPreview(0, false, 350); }
   if (!isPro() && j.duration > FREE_SECS + 0.5) setTimeout(() => toast(`Free exports are up to ${FREE_SECS} seconds. Try everything, then unlock Pro to export this one.`), 2600);
   videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
@@ -2800,28 +2802,43 @@ video.addEventListener("play", () => ($("#playIcon").innerHTML = ICON.pause));
 video.addEventListener("pause", () => ($("#playIcon").innerHTML = ICON.play));
 video.addEventListener("loadedmetadata", () => { $("#scrub").max = video.duration || 1; if (!job) videoDims = { w: video.videoWidth || 1080, h: video.videoHeight || 1920 }; });
 // the preview can trip over itself on phones (the video chip is busy, or memory is tight): quietly restart it where it was
-let pvTime = 0, pvPlaying = false, pvTries = 0, pvFor = null;
+let pvTime = 0, pvPlaying = false, pvTries = 0, pvFor = null, pvBusy = false;
 video.addEventListener("timeupdate", () => { if (!video.error && video.currentTime > 0) pvTime = video.currentTime; });
 video.addEventListener("playing", () => { pvPlaying = true; });
 video.addEventListener("pause", () => { if (!video.error) pvPlaying = false; });
+function restartPreview(at, play, wait = 0) {
+  const url = objectURL; if (!url) return;
+  pvBusy = true;
+  setTimeout(() => {
+    if (objectURL !== url) { pvBusy = false; return; }
+    video.src = url;
+    const ready = () => { try { video.currentTime = at; } catch {} if (play) video.play().catch(() => {}); pvBusy = false; };
+    video.addEventListener("loadedmetadata", ready, { once: true });
+    setTimeout(() => { pvBusy = false; }, 4000);
+  }, wait);
+}
+function recoverPreview(why, play) {
+  if (pvFor !== objectURL) { pvFor = objectURL; pvTries = 0; }
+  logProblem(`preview ${why} at ${pvTime.toFixed(1)}s (try ${pvTries + 1}, ready ${video.readyState})`);
+  if (objectURL && pvTries < 4) { pvTries++; restartPreview(pvTime, play, 200 * pvTries); return true; }
+  return false;
+}
 video.addEventListener("error", () => {
   if (!video.src || view !== "editor") return;
+  pvBusy = false;
   const code = video.error && video.error.code, msg = (video.error && video.error.message) || "";
-  if (pvFor !== objectURL) { pvFor = objectURL; pvTries = 0; }
-  logProblem(`preview video error ${code} at ${pvTime.toFixed(1)}s (try ${pvTries + 1})${msg ? " · " + msg.slice(0, 80) : ""}`);
-  if (objectURL && pvTries < 3) {
-    pvTries++;
-    const at = pvTime, play = pvPlaying, url = objectURL;
-    setTimeout(() => {
-      if (objectURL !== url || view !== "editor") return;
-      video.src = url;
-      video.addEventListener("loadedmetadata", () => { try { video.currentTime = at; } catch {} if (play) video.play().catch(() => {}); }, { once: true });
-    }, 250 * pvTries);
-    return;
-  }
+  if (recoverPreview(`error ${code}${msg ? " · " + msg.slice(0, 70) : ""}`, pvPlaying)) return;
   // only say something if it really won't play
   setTimeout(() => { if (view === "editor" && video.error && video.readyState < 2) toast("This video can't play in the preview, but exporting still works.", true); }, 1500);
 });
+// some phones freeze the picture without reporting an error: notice when a playing video stops moving
+{ let last = -1, still = 0;
+  setInterval(() => {
+    if (view !== "editor" || !job || pvBusy || !$("#working").hidden || video.paused || video.ended || video.seeking || document.hidden) { still = 0; last = video.currentTime; return; }
+    if (video.currentTime === last) still++; else still = 0;
+    last = video.currentTime;
+    if (still >= 4) { still = 0; recoverPreview("froze", true); }
+  }, 500); }
 $("#scrub").addEventListener("input", (e) => (video.currentTime = +e.target.value));
 window.addEventListener("keydown", (e) => {
   if (e.target.matches("input, select, textarea") || view !== "editor" || $("#veil")) return;
