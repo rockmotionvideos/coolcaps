@@ -2770,6 +2770,7 @@ function showLangBar(j) {
 }
 function onTranscribed(j) {
   job = j; words = j.words.map((w) => ({ ...w }));
+  resetWorker();  // captions are written: unload the speech engine so the preview and export get the phone's memory
   if (!isPro() && j.duration > FREE_SECS + 0.5) setTimeout(() => toast(`Free exports are up to ${FREE_SECS} seconds. Try everything, then unlock Pro to export this one.`), 2600);
   videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
@@ -2798,11 +2799,27 @@ $("#playBtn").onclick = togglePlay;
 video.addEventListener("play", () => ($("#playIcon").innerHTML = ICON.pause));
 video.addEventListener("pause", () => ($("#playIcon").innerHTML = ICON.play));
 video.addEventListener("loadedmetadata", () => { $("#scrub").max = video.duration || 1; if (!job) videoDims = { w: video.videoWidth || 1080, h: video.videoHeight || 1920 }; });
+// the preview can trip over itself on phones (the video chip is busy, or memory is tight): quietly restart it where it was
+let pvTime = 0, pvPlaying = false, pvTries = 0, pvFor = null;
+video.addEventListener("timeupdate", () => { if (!video.error && video.currentTime > 0) pvTime = video.currentTime; });
+video.addEventListener("playing", () => { pvPlaying = true; });
+video.addEventListener("pause", () => { if (!video.error) pvPlaying = false; });
 video.addEventListener("error", () => {
   if (!video.src || view !== "editor") return;
-  const code = video.error && video.error.code;
-  logProblem("preview video error " + code);
-  // a passing hiccup (e.g. the old video being swapped out) isn't worth a warning; only say something if it really won't play
+  const code = video.error && video.error.code, msg = (video.error && video.error.message) || "";
+  if (pvFor !== objectURL) { pvFor = objectURL; pvTries = 0; }
+  logProblem(`preview video error ${code} at ${pvTime.toFixed(1)}s (try ${pvTries + 1})${msg ? " · " + msg.slice(0, 80) : ""}`);
+  if (objectURL && pvTries < 3) {
+    pvTries++;
+    const at = pvTime, play = pvPlaying, url = objectURL;
+    setTimeout(() => {
+      if (objectURL !== url || view !== "editor") return;
+      video.src = url;
+      video.addEventListener("loadedmetadata", () => { try { video.currentTime = at; } catch {} if (play) video.play().catch(() => {}); }, { once: true });
+    }, 250 * pvTries);
+    return;
+  }
+  // only say something if it really won't play
   setTimeout(() => { if (view === "editor" && video.error && video.readyState < 2) toast("This video can't play in the preview, but exporting still works.", true); }, 1500);
 });
 $("#scrub").addEventListener("input", (e) => (video.currentTime = +e.target.value));
