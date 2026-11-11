@@ -386,8 +386,11 @@ button.row.linkrow { width: 100%; text-align: left; background: none; border: 0;
 .sheet .fine { font-size: 12px; opacity: .55; margin: 0; text-align: center; }
 .minipro { display: none; font: 800 8px/1 var(--ui); letter-spacing: .05em; margin-left: 5px; padding: 2px 4px; border-radius: 4px; vertical-align: 2px; font-style: normal; background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; }
 .locked .minipro { display: inline-block; }
+.protag { display: inline-block; font: 800 8px/1 var(--ui); letter-spacing: .05em; margin-left: 6px; padding: 2px 4px; border-radius: 4px; vertical-align: 2px; font-style: normal; background: linear-gradient(90deg, var(--accent), var(--pink)); color: #1A0A10; }
+body.is-pro .protag { display: none; }
 body.is-pro .probadge { display: none; }
 .sheet.pw { gap: 14px; }
+.sheet.pw > * { flex-shrink: 0; }
 .sheet.pw .tag { align-self: flex-start; }
 .sheet.pw h3 { font-size: 40px; line-height: .95; font-weight: 400; }
 .pwlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -507,7 +510,7 @@ body.is-pro .probadge { display: none; }
         </span>
       </button>
       <label class="langchip"><span>Spoken language</span><select id="homeLang" aria-label="Spoken language in the video"></select></label>
-      <div class="langchip outchip"><span>Captions in</span><div class="seg mini" id="outSeg" role="group" aria-label="Caption language"><button data-v="same">Original</button><button data-v="en">English</button></div></div>
+      <div class="langchip outchip"><span>Captions in</span><div class="seg mini" id="outSeg" role="group" aria-label="Caption language"><button data-v="same">Original</button><button data-v="en">English<i class="protag">PRO</i></button></div></div>
       <div class="warncard" id="inAppCard" hidden>
         <b>Open Cool Caps in your browser</b>
         <span id="inAppHow">You're inside another app's browser, which can't save videos or install Cool Caps.</span>
@@ -726,10 +729,10 @@ body.is-pro .probadge { display: none; }
           </div>
           <div class="grp">
             <div class="grp-title">Voice effects <span class="tag p">New</span></div>
-            <div class="inline-row"><div><b>Loud mode</b><span>Louder words get bigger and shake, quiet ones shrink</span></div><button class="switch" id="loudSw" role="switch" aria-label="Loud mode"></button></div>
+            <div class="inline-row"><div><b>Loud mode<i class="protag">PRO</i></b><span>Louder words get bigger and shake, quiet ones shrink</span></div><button class="switch" id="loudSw" role="switch" aria-label="Loud mode"></button></div>
             <div class="inline-row"><div><b>Two-voice colours</b><span id="voicesNote">Colours a second speaker differently</span></div><button class="switch" id="voicesSw" role="switch" aria-label="Two-voice colours"></button></div>
             <div id="v2More"><span class="label">Second voice colour</span><div class="swrow" id="v2Sw"></div></div>
-            <div class="inline-row"><div><b>Emoji bursts</b><span>Words like money, fire and love burst into emojis</span></div><button class="switch" id="burstSw" role="switch" aria-label="Emoji bursts"></button></div>
+            <div class="inline-row"><div><b>Emoji bursts<i class="protag">PRO</i></b><span>Words like money, fire and love burst into emojis</span></div><button class="switch" id="burstSw" role="switch" aria-label="Emoji bursts"></button></div>
           </div>
           <div class="grp">
             <div class="grp-title">Emojis</div>
@@ -926,6 +929,21 @@ let PLAYST = (() => { try { return JSON.parse(localStorage.getItem("coolcaps.pla
 let LIC = (() => { try { return JSON.parse(localStorage.getItem(LIC_KEY)) || null; } catch { return null; } })();
 const isPro = () => PLAYST.app ? !!PLAYST.pro : (!LOCK_PRO || !!(LIC && LIC.ok));
 const isLocked = (style) => !isPro() && PRO.has(style);
+const FREE_SECS = 60;                          // Free plan: export videos up to this long
+const cap1 = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
+// What in the current video needs Pro to export (Pro things all work in the preview, so people can try them)
+function proNeeds() {
+  if (isPro()) return [];
+  const r = [], m = job;
+  if (m && m.duration > FREE_SECS + 0.5) r.push({ k: "long", t: `videos longer than ${FREE_SECS} seconds` });
+  if (PRO.has(S.style)) r.push({ k: "style", t: `the ${cap1(S.style)} animation` });
+  if (S.loud) r.push({ k: "loud", t: "Loud mode" });
+  if (S.bursts) r.push({ k: "bursts", t: "Emoji bursts" });
+  if (m && m.translated) r.push({ k: "tr", t: "English translation" });
+  return r;
+}
+const PRO_PERKS = [`Videos of any length (Free: up to ${FREE_SECS} seconds)`, `All ${PRO.size} Trendy and Kinetic animations`, "Loud mode and Emoji bursts", "Translate captions into English", "Max quality exports"];
+const joinAnd = (a) => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
 function saveLic(v) { LIC = v; try { v ? localStorage.setItem(LIC_KEY, JSON.stringify(v)) : localStorage.removeItem(LIC_KEY); } catch {} }
 async function lsCall(action, fields) {
   const r = await fetch(LS_API + action, { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields) });
@@ -1547,7 +1565,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.6 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.7 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1639,7 +1657,7 @@ function renderMyStyles() {
     const more = el("span", "more", "⋯"); more.setAttribute("role", "button"); more.setAttribute("aria-label", "Options for " + m.name);
     more.onclick = (e) => { e.stopPropagation(); myStyleMenu(m); };
     b.append(demo, more, el("b", "", m.name));
-    b.onclick = () => { if (isLocked(m.s.style)) return paywall(m.s.style); setS({ ...styleOnly(m.s), x: S.x, y: S.y, position: S.position }); toast(`Using "${m.name}"`); };
+    b.onclick = () => { setS({ ...styleOnly(m.s), x: S.x, y: S.y, position: S.position }); toast(`Using "${m.name}"`); };
     row.append(b);
     const k = !!KIN[m.s.style];
     const cap = new Captioner(layer);
@@ -1717,7 +1735,7 @@ function buildHome() {
     const nm = el("span", "pname", p.name); nm.append(el("small", "", p.sub));
     if (PRO.has(p.s.style)) demo.append(el("span", "probadge", "PRO"));
     b.append(demo, nm);
-    b.onclick = () => { if (isLocked(p.s.style)) return paywall(p.s.style); applyPreset(p); toast(`${p.name} style is on. Now pick a video.`); $("#pick").click(); };
+    b.onclick = () => { applyPreset(p); toast(`${p.name} style is on. Now pick a video.`); $("#pick").click(); };
     $("#presets").append(b);
     const k = !!KIN[p.s.style];
     minis.push({ cap: new Captioner(layer), words: k ? DEMO_K : DEMO, vw: 600, vh: 700, offset: n * 0.41, loop: k ? 2.4 : 1.85, el: b,
@@ -1738,13 +1756,27 @@ const LIB = {
   },
   async run(mode, fn) {
     const db = await this.open();
-    return new Promise((res, rej) => { const t = db.transaction("videos", mode), req = fn(t.objectStore("videos")); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); });
+    return new Promise((res, rej) => { const t = db.transaction("videos", mode), req = fn(t.objectStore("videos")); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error || new Error("storage error")); t.onabort = () => rej(t.error || new Error("storage full")); });
   },
   all() { return this.run("readonly", (st) => st.getAll()); },
   put(v) { return this.run("readwrite", (st) => st.put(v)); },
   del(id) { return this.run("readwrite", (st) => st.delete(id)); },
   clear() { return this.run("readwrite", (st) => st.clear()); },
 };
+// keep a finished video in the Library; returns false (and notes why) if the phone wouldn't store it
+async function keepInLibrary(item) {
+  try {
+    await LIB.put(item);
+    const back = await LIB.run("readonly", (st) => st.getKey(item.id));
+    if (back == null) throw new Error("not stored");
+    return true;
+  } catch (e) {
+    let room = "";
+    try { const q = await navigator.storage.estimate(); room = ` · ${mb(q.usage || 0)} used of ${mb(q.quota || 0)}`; } catch {}
+    logProblem(`library save failed (${mb(item.size)}): ${(e && (e.name || e.message)) || e}${room}`);
+    return false;
+  }
+}
 const niceVid = (n) => n.replace(/\.(mp4|webm)$/i, "");
 async function loadRecent() {
   let items = [];
@@ -1794,20 +1826,35 @@ function openSheet(build) {
 }
 function closeSheet() { const v = $("#veil"); if (v) { v.querySelectorAll("video").forEach((x) => x.pause()); v.remove(); } }
 
+function pwIntro(sh, style) {
+  const need = style && style.need;
+  sh.append(el("h3", "display", need ? "Love how it looks?" : "Unlock everything"));
+  let sub = "Get the full creative toolkit.";
+  if (need) sub = `To export this video you need Pro for ${joinAnd(need.map((n) => n.t))}.`;
+  else if (style === "max") sub = "Max quality exports are part of Pro.";
+  else if (style === "long") sub = `Free exports are up to ${FREE_SECS} seconds. Pro exports any length.`;
+  else if (typeof style === "string") sub = `"${cap1(style)}" is a Pro animation.`;
+  sh.append(el("p", "sub", sub));
+  if (need && !need.some((n) => n.k === "long" || n.k === "tr")) {
+    const free = el("button", "linkbtn", "Export with free options instead");
+    free.onclick = () => { closeSheet(); setS({ loud: false, bursts: false, ...(PRO.has(S.style) ? { style: "bounce", ...lookFor("bounce") } : {}) }); toast("Switched to free options. Tap Export again."); };
+    sh.__free = free;
+  }
+}
 function playPaywall(sh, style) {
   if (isPro()) {
     sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Pro is on"));
     const cur = PLAY_SUBS.find((s) => s.id === PLAYST.sku);
-    sh.append(el("p", "sub", "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." + (cur ? ` Your plan: ${cur.name}.` : "")));
+    sh.append(el("p", "sub", "Thanks for supporting Cool Caps! Any length, every style and effect, Max quality." + (cur ? ` Your plan: ${cur.name}.` : "")));
     const man = el("button", "btn ghost block", "Manage subscription"); man.onclick = () => window.open(manageSubUrl(), "_blank", "noopener");
     const ok = el("button", "btn primary block", "Close"); ok.onclick = closeSheet;
     sh.append(man, ok, el("p", "fine", "Cancel or change your plan any time in Google Play."));
     return;
   }
-  sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Unlock every style"));
-  sh.append(el("p", "sub", style === "max" ? "Max quality exports are part of Pro." : style ? `"${style[0].toUpperCase() + style.slice(1)}" is a Pro animation.` : "Get the full creative toolkit."));
+  sh.append(el("span", "tag pro", "Cool Caps Pro"));
+  pwIntro(sh, style);
   const ul = el("ul", "pwlist");
-  [`All ${PRO.size} Trendy and Kinetic animations`, "No watermark on your videos", "Max quality exports", "Every new style we add"].forEach((x) => ul.append(el("li", "", x)));
+  PRO_PERKS.forEach((x) => ul.append(el("li", "", x)));
   let pick = PLAY_SUBS.find((s) => s.best).id;
   const plans = el("div", "plans"), buy = el("button", "btn primary block", ""), msg = el("p", "sub pwmsg", "");
   const label = () => {
@@ -1840,6 +1887,7 @@ function playPaywall(sh, style) {
   restore.onclick = async () => { restore.disabled = true; await syncPlay(); restore.disabled = false; if (isPro()) { closeSheet(); refreshPlan(); toast("Pro restored. Welcome back!"); } else toast("No active Pro subscription on this Google account.", true); };
   const later = el("button", "linkbtn", "Keep using Free"); later.onclick = closeSheet;
   sh.append(ul, plans, buy, msg, later, restore);
+  if (sh.__free) later.after(sh.__free);
   sh.append(el("p", "fine", "Renews automatically until you cancel. Cancel any time in Google Play, at least 24 hours before it renews. Payment is charged to your Google Play account."));
   const links = el("p", "fine", ""); sh.append(links); links.innerHTML = '<a href="terms.html" target="_blank">Terms</a> · <a href="privacy.html" target="_blank">Privacy</a>';
 }
@@ -1849,7 +1897,7 @@ function paywall(style) {
     if (inPlayApp()) return playPaywall(sh, style);
     if (isPro()) {
       sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Pro is on"));
-      sh.append(el("p", "sub", LOCK_PRO ? "Thanks for supporting Cool Caps! Every style, no watermark, Max quality." : "Launch special: every style, no watermark and Max quality are free for now. Enjoy!"));
+      sh.append(el("p", "sub", LOCK_PRO ? "Thanks for supporting Cool Caps! Any length, every style and effect, Max quality." : "Launch special: every Pro feature is free for now. Enjoy!"));
       if (LIC && LIC.key) {
         sh.append(el("p", "sub", "License key " + maskKey(LIC.key) + (LIC.email ? " · " + LIC.email : "")));
         const rm = el("button", "btn danger block", "Remove Pro from this phone");
@@ -1862,10 +1910,10 @@ function paywall(style) {
       const ok = el("button", "btn ghost block", "Close"); ok.onclick = closeSheet; sh.append(ok);
       return;
     }
-    sh.append(el("span", "tag pro", "Cool Caps Pro"), el("h3", "display", "Unlock every style"));
-    sh.append(el("p", "sub", style === "max" ? "Max quality exports are part of Pro." : style ? `"${style[0].toUpperCase() + style.slice(1)}" is a Pro animation.` : "Get the full creative toolkit."));
+    sh.append(el("span", "tag pro", "Cool Caps Pro"));
+    pwIntro(sh, style);
     const ul = el("ul", "pwlist");
-    [`All ${PRO.size} Trendy and Kinetic animations`, "No watermark on your videos", "Max quality exports", "Every new style we add, free"].forEach((x) => ul.append(el("li", "", x)));
+    PRO_PERKS.forEach((x) => ul.append(el("li", "", x)));
     const price = el("div", "pwprice"); price.append(el("b", "display", PRO_PRICE), el("span", "", PRO_PRICE_NOTE));
     const buy = el("button", "btn primary block", CHECKOUT_URL ? `Get Pro for ${PRO_PRICE}` : "Checkout coming soon");
     if (CHECKOUT_URL) buy.onclick = () => window.open(CHECKOUT_URL, "_blank", "noopener");
@@ -1884,6 +1932,7 @@ function paywall(style) {
     have.onclick = () => { have.hidden = true; keyWrap.hidden = false; inp.focus(); };
     const later = el("button", "linkbtn", "Keep using Free"); later.onclick = closeSheet;
     sh.append(ul, price, buy, have, keyWrap, later);
+    if (sh.__free) later.after(sh.__free);
     sh.append(el("p", "fine", "After paying you'll get a license key by email. Paste it here. Works on up to 3 phones."));
   });
 }
@@ -2010,7 +2059,7 @@ function buildEditorControls() {
       const demo = el("div", "demo footage"), layer = el("div", "cap-layer"); demo.append(layer);
       if (PRO.has(key)) demo.append(el("span", "probadge", "PRO"));
       b.append(demo, el("b", "", key));
-      b.onclick = () => { if (isLocked(key)) return paywall(key); setS({ style: key, ...lookFor(key) }); };
+      b.onclick = () => { setS({ style: key, ...lookFor(key) }); if (isLocked(key) && !store.get("coolcaps.triedPro")) { store.set("coolcaps.triedPro", 1); toast("Pro style: try it free in the preview. Unlock Pro to export it."); } };
       grid.append(b);
       minis.push({ cap: new Captioner(layer), words: k ? DEMO_K : DEMO, vw: 600, vh: 430, offset: (gnum * 6 + n) * 0.37, loop: k ? 2.4 : 1.85, el: b,
         settings: () => ({ ...S, ...lookFor(key), style: key, size: k ? 44 : 56, x: 0.5, y: 0.5, words: 3, smart: false, emoji: false, maxw: 0.92, line: 1 }) });
@@ -2440,7 +2489,7 @@ async function startFile(file) {
   if (objectURL) URL.revokeObjectURL(objectURL);
   objectURL = URL.createObjectURL(file); video.src = objectURL; currentFile = file;
   $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
-  if (!main) { main = new Captioner($("#caps")); main.watermark = true; }
+  if (!main) { main = new Captioner($("#caps")); main.watermark = false; }
   main.set([], S, 1080, 1920);
   go("editor"); setTool("style");
   setWorking(true, { pct: null, stage: "Reading the audio", note: "Your video stays on your phone. Nothing is uploaded." });
@@ -2516,6 +2565,7 @@ async function startFile(file) {
   try { meta.voices = analyzeVoice(keep, ws); } catch (e) { logProblem("voice analysis: " + e.message); }
   meta.timingFixed = fixed.fixed;
   meta.lang = oneOffLang || APP.lang || detectedLang || (store.get("coolcaps.noDetect") || IS_IOS ? phoneLang() : "");
+  meta.translated = APP.out === "en" && !!meta.lang && meta.lang !== "en";
   meta.langForced = !!(oneOffLang || APP.lang); meta.langConf = detectConf; meta.langTop = lastTop;
   oneOffLang = null;
   try {
@@ -2720,6 +2770,7 @@ function showLangBar(j) {
 }
 function onTranscribed(j) {
   job = j; words = j.words.map((w) => ({ ...w }));
+  if (!isPro() && j.duration > FREE_SECS + 0.5) setTimeout(() => toast(`Free exports are up to ${FREE_SECS} seconds. Try everything, then unlock Pro to export this one.`), 2600);
   videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
   setWorking(false); refreshAll(true); showLangBar(j);
@@ -3263,10 +3314,19 @@ const FX = (() => {
       for (let i = 0; i < at.n; i++) if (at.dts[i] < limit) aIdx.push(i);
     }
     const ftyp = box("ftyp", enc.encode("isom"), U32(0x200), enc.encode("isomiso2avc1mp41"));
+    // lay picture and sound side by side in half-second slices. Players (and apps you share to) stall on
+    // files that keep all the picture first and all the sound last, because they have to jump around the file.
+    const order = [];
+    { const aMin = aIdx.length ? at.dts[0] : 0; let vi = 0, ai = 0, T = 0.5;
+      while (vi < out.length || ai < aIdx.length) {
+        while (vi < out.length && vDts[vi] / VTS < T) order.push([0, vi++]);
+        while (ai < aIdx.length && (at.dts[aIdx[ai]] - aMin) / at.timescale < T) order.push([1, ai++]);
+        T += 0.5;
+      } }
     const build = (mdatStart) => {
       let off = mdatStart;
-      const vOffs = out.map((c) => { const o = off; off += c.data.length; return o; });
-      const aOffs = aIdx.map((i) => { const o = off; off += at.sizes[i]; return o; });
+      const vOffs = new Array(out.length), aOffs = new Array(aIdx.length);
+      for (const [k, i] of order) { if (k === 0) { vOffs[i] = off; off += out[i].data.length; } else { aOffs[i] = off; off += at.sizes[aIdx[i]]; } }
       const vStsd = full("stsd", 0, 0, U32(1), avcEntry(outW, outH, avcC));
       const traks = [trak(1, { handler: "vide", timescale: VTS, duration: vTotal, movieDur: movieMs, width: outW, height: outH, stsd: vStsd,
         tables: sampleTables(vDur, out.map((c) => c.data.length), vOffs, vCtts, vSync) })];
@@ -3284,10 +3344,10 @@ const FX = (() => {
     const moovOut = build(ftyp.length + probe.length + mdatHdr);
     const mdatHead = new Uint8Array(16); const dv = new DataView(mdatHead.buffer);
     dv.setUint32(0, 1); mdatHead.set(enc.encode("mdat"), 4); dv.setUint32(8, Math.floor((mdatBody + 16) / 4294967296)); dv.setUint32(12, (mdatBody + 16) >>> 0);
-    const parts = [ftyp, moovOut, mdatHead, ...out.map((c) => c.data)];
+    const parts = [ftyp, moovOut, mdatHead];
     // audio: copy the original compressed sound straight across (no re-encoding, no quality loss)
     const aread = reader(file);
-    for (const i of aIdx) parts.push((await aread(at.offsets[i], at.sizes[i])).slice());
+    for (const [k, i] of order) parts.push(k === 0 ? out[i].data : (await aread(at.offsets[aIdx[i]], at.sizes[aIdx[i]])).slice());
     return { blob: new Blob(parts, { type: "video/mp4" }), thumb, seconds: (performance.now() - t0) / 1000, codec: dcfg.codec, rot };
   }
   /* ---------- sound for transcribing: pull just the audio track out of the file ----------
@@ -3413,9 +3473,12 @@ const FX = (() => {
   return { run, audio16k, audioM4A, audioADTS, info };
 })();
 
+// fully let go of a <video>: phones only have a few hardware video decoders, and a leftover one can freeze the next player
+function freeVideo(v) { try { v.pause(); v.removeAttribute("src"); v.load(); v.remove(); } catch {} }
 $("#exportBtn").onclick = async () => {
   if (!job || !words.length) return;
-  if (isLocked(S.style)) return paywall(S.style);
+  const need = proNeeds();
+  if (need.length) return paywall({ need });
   if (exporting) return toast("Already exporting this video");
   exporting = true; $("#exportBtn").disabled = true;
   // create these straight away, while the tap still counts as a user action (needed for sound)
@@ -3428,6 +3491,7 @@ $("#exportBtn").onclick = async () => {
   let primed = Promise.resolve();
   try { v.muted = true; const pp = v.play(); if (pp && pp.then) primed = pp.then(() => v.pause()).catch(() => {}); } catch {}
   video.pause(); go("result");
+  resetWorker();  // the speech engine isn't needed while exporting: free its memory for the video
   const D0 = (job && job.duration) || video.duration || 0;
   resultProgress(0, "Getting your video ready…", null, "Step 1 of 2 · Getting ready");
   const SS = { ...S }, W = words.map((w) => ({ ...w }));
@@ -3453,12 +3517,15 @@ $("#exportBtn").onclick = async () => {
         const item = { id: Date.now(), name: `${stem} - ${SS.style} ${SS.words}w.mp4`, mtime: Date.now() / 1000, size: fast.blob.size, type: "video/mp4", blob: fast.blob, thumb: fast.thumb };
         if (!item.thumb) { const c = el("canvas"); c.width = 180; c.height = 320; item.thumb = c.toDataURL("image/jpeg", 0.5); }
         console.info(`fast export: ${fast.seconds.toFixed(1)}s, ${fast.codec}, rotation ${fast.rot}`);
-        try { await LIB.put(item); } catch {}
+        freeVideo(v);  // hand the phone's video chip back before the finished video starts playing
+        item.kept = await keepInLibrary(item);
+        logProblem(`export ok · fast ${fast.seconds.toFixed(1)}s · ${fast.codec} · ${mb(item.size)} · ${ow}x${oh} · library ${item.kept ? "saved" : "NOT saved"}`);
         showDone(item);
         return;
       } catch (err) {
         if (view !== "result") throw new Error("Export stopped.");
         console.warn("fast export not available, using real-time export:", err);
+        logProblem("fast export fell back: " + ((err && err.message) || err));
         resultProgress(0, `This video needs the slower method: it plays through once while adding the captions, so it takes about as long as the video (${secsText(D0)}).`, D0 + 3, "Step 1 of 2 · Getting ready");
       }
     }
@@ -3502,9 +3569,12 @@ $("#exportBtn").onclick = async () => {
     const blob = new Blob(chunks, { type });
     if (!blob.size) throw new Error("The recording came out empty. Keep Cool Caps open on screen while it exports, then try again.");
     const item = { id: Date.now(), name: `${stem} - ${SS.style} ${SS.words}w.${ext}`, mtime: Date.now() / 1000, size: blob.size, type, blob, thumb: thumb || makeThumb() };
-    try { await LIB.put(item); } catch {}
+    freeVideo(v);
+    item.kept = await keepInLibrary(item);
+    logProblem(`export ok · real-time · ${type} · ${mb(item.size)} · library ${item.kept ? "saved" : "NOT saved"}`);
     showDone(item);
   } catch (e) {
+    logProblem("export failed: " + ((e && e.message) || e));
     if (view !== "result") toast(e.message, true);
     else {
       $("#resTitle").textContent = "Export failed";
@@ -3515,7 +3585,7 @@ $("#exportBtn").onclick = async () => {
   } finally {
     exporting = false; $("#exportBtn").disabled = false; keepAwake(false);
     try { ac.close(); } catch {}
-    v.remove();
+    freeVideo(v);
   }
 };
 /* ===================== streaks, haptics, confetti ===================== */
@@ -3565,6 +3635,21 @@ function showDone(it) {
   $("#resTitle").textContent = "Done";
   const r = $("#result"); r.textContent = "";
   const fr = el("div", "frame"), v = el("video"); v.src = URL.createObjectURL(it.blob); v.controls = true; v.autoplay = true; v.loop = true; v.playsInline = true; fr.append(v);
+  { // if playback freezes (seen on some phones right after an export), reload the player where it stopped
+    let last = -1, stuck = 0, tries = 0;
+    const watch = setInterval(() => {
+      if (!v.isConnected) return clearInterval(watch);
+      if (v.paused || v.ended || document.hidden) { stuck = 0; last = v.currentTime; return; }
+      if (v.currentTime === last) stuck++; else stuck = 0;
+      last = v.currentTime;
+      if (stuck >= 5 && tries < 3) {
+        tries++; stuck = 0; const at = v.currentTime;
+        logProblem(`result player froze at ${at.toFixed(1)}s (ready ${v.readyState}, try ${tries})`);
+        try { URL.revokeObjectURL(v.src); } catch {}
+        v.src = URL.createObjectURL(it.blob); v.currentTime = at; v.play().catch(() => {});
+      }
+    }, 500);
+  }
   const row = el("div", "btnrow");
   const save = el("button", "btn primary", "Save to phone"); save.onclick = () => saveToPhone(it);
   const share = el("button", "btn ghost", "Share"); share.onclick = () => shareVideo(it);
@@ -3575,7 +3660,7 @@ function showDone(it) {
   badges.append(el("span", "", `🔥 ${st.streak}-day streak`), el("span", "", `🎬 Video #${st.count}`));
   if (st.streak > 1 && st.streak === st.best) badges.append(el("span", "", "🏆 Best streak yet"));
   const lines = ["It's ready.", "Nailed it.", "That's a banger.", "Ready to post.", "Looking good."];
-  r.append(fr, el("h2", "display", lines[(st.count - 1) % lines.length]), badges, row, el("p", "fname", "Kept in your Library · " + it.name), done);
+  r.append(fr, el("h2", "display", lines[(st.count - 1) % lines.length]), badges, row, el("p", "fname", (it.kept === false ? "Couldn't keep this one in your Library (your phone's storage may be full). Save it to your phone now · " : "Kept in your Library · ") + it.name), done);
   if ((IS_IOS && !STANDALONE) || IN_APP) r.append(el("p", "fname", IN_APP ? "Tip: save it now. In-app browsers don't always keep your Library." : "Tip: save it to Photos. Safari can clear the Library if you don't open Cool Caps for a while. Adding Cool Caps to your Home Screen keeps it."));
   confetti();
 }
