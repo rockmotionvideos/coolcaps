@@ -1565,7 +1565,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.8 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "4.9 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -2482,11 +2482,53 @@ let objectURL = null, token = 0, wakeLock = null;
 async function keepAwake(on) {
   try { if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; } } catch { wakeLock = null; }
 }
+/* The phone's gallery only lends the app a video: the link can stop working part-way through (the preview
+   freezes or goes black). So Cool Caps first makes its own working copy inside the app, and uses that for
+   the preview, the captions and the export. The copy is replaced by the next video and removed on start-up. */
+const OWN = new WeakSet();
+let copyNote = "";
+async function ownCopy(file, onPct) {
+  if (OWN.has(file)) return file;
+  const t0 = performance.now(), CH = 4 << 20, type = file.type || "video/mp4";
+  const chunk = async (o) => { for (let k = 0; ; k++) { try { return await file.slice(o, o + CH).arrayBuffer(); } catch (e) { if (k >= 3) throw e; await sleep(250 * (k + 1)); } } };
+  const done = (f, how) => { OWN.add(f); copyNote = `copy ${how} ${mb(file.size)} in ${((performance.now() - t0) / 1000).toFixed(1)}s`; return f; };
+  let why = "";
+  try {  // 1) on the phone's storage, inside the app
+    const dir = await navigator.storage.getDirectory();
+    try { await dir.removeEntry("working-video"); } catch {}
+    const q = await navigator.storage.estimate().catch(() => null);
+    if (q && q.quota && q.quota - (q.usage || 0) < file.size * 1.1 + 5e7) throw new Error("not enough room");
+    const h = await dir.getFileHandle("working-video", { create: true }), w = await h.createWritable();
+    try { for (let o = 0; o < file.size; o += CH) { await w.write(await chunk(o)); onPct && onPct(Math.min(1, (o + CH) / file.size)); } await w.close(); }
+    catch (e) { try { await w.abort(); } catch {} throw e; }
+    const f = await h.getFile();
+    if (f.size !== file.size) throw new Error("copy came out the wrong size");
+    return done(new File([f], file.name, { type, lastModified: file.lastModified }), "disk");
+  } catch (e) { why = (e && (e.message || e.name)) || String(e); }
+  if (file.size < (IS_IOS ? 1.2e8 : 4e8)) {
+    try {  // 2) in memory
+      const parts = [];
+      for (let o = 0; o < file.size; o += CH) { parts.push(await chunk(o)); onPct && onPct(Math.min(1, (o + CH) / file.size)); }
+      return done(new File(parts, file.name, { type, lastModified: file.lastModified }), "memory (" + why.slice(0, 40) + ")");
+    } catch (e) { why += " / " + ((e && (e.message || e.name)) || e); }
+  }
+  copyNote = "no copy: " + why.slice(0, 90); logProblem("working copy failed · " + why.slice(0, 140));
+  return file;
+}
+try { navigator.storage.getDirectory().then((d) => d.removeEntry("working-video")).catch(() => {}); } catch {}
 async function startFile(file) {
   const my = ++token;
   words = []; history = []; job = null; lastWord = lastRow = -1;
   $("#transcript").textContent = ""; $("#langBar").hidden = true;
-  if (objectURL) URL.revokeObjectURL(objectURL);
+  if (objectURL) { URL.revokeObjectURL(objectURL); objectURL = null; video.removeAttribute("src"); video.load(); }
+  if (!OWN.has(file)) {
+    go("editor"); setTool("style");
+    $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
+    setWorking(true, { pct: 0, stage: "Getting your video ready", note: "Your video stays on your phone. Nothing is uploaded." });
+    let lastPct = 0;
+    file = await ownCopy(file, (p) => { if (my === token && p - lastPct > 0.04) { lastPct = p; setWorking(true, { pct: p, stage: "Getting your video ready", note: "Your video stays on your phone. Nothing is uploaded." }); } });
+    if (my !== token) return;
+  }
   objectURL = URL.createObjectURL(file); video.src = objectURL; currentFile = file;
   $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
   if (!main) { main = new Captioner($("#caps")); main.watermark = false; }
@@ -2570,7 +2612,7 @@ async function startFile(file) {
   oneOffLang = null;
   try {
     const W = ws, first = W[0], last = W[W.length - 1];
-    logProblem(`video ${meta.duration.toFixed(1)}s ${meta.width}x${meta.height} · ${audioReport} · ${vadNote}${cloudNote ? " · " + cloudNote : ""} · ${W.length} words ${first.start.toFixed(1)}→${last.end.toFixed(1)}s` +
+    logProblem(`video ${meta.duration.toFixed(1)}s ${meta.width}x${meta.height} · ${copyNote} · ${audioReport} · ${vadNote}${cloudNote ? " · " + cloudNote : ""} · ${W.length} words ${first.start.toFixed(1)}→${last.end.toFixed(1)}s` +
       ` · ${chosenModel()}${APP.modelPicked ? "" : "(auto)"}/${lastEngine || "?"} · lang ${meta.lang || "auto"}${detectedLang && !meta.langForced ? " " + Math.round(detectConf * 100) + "% [" + lastTop + "]" : ""}${fixed.fixed ? " · TIMINGS REPAIRED" : ""} · "${W.slice(0, 6).map((w) => w.word).join(" ").slice(0, 60)}"`);
   } catch {}
   onTranscribed({ ...meta, words: ws });
@@ -2772,7 +2814,7 @@ function onTranscribed(j) {
   job = j; words = j.words.map((w) => ({ ...w }));
   resetWorker();  // captions are written: unload the speech engine so the preview and export get the phone's memory
   // give the preview a fresh start now the heavy work is over (a player opened while the phone was busy can be half-broken)
-  if (objectURL) { pvFor = objectURL; pvTries = 0; restartPreview(0, false, 350); }
+  if (objectURL) { pvFor = objectURL; pvTries = 0; restartPreview(0, false, 0); }
   if (!isPro() && j.duration > FREE_SECS + 0.5) setTimeout(() => toast(`Free exports are up to ${FREE_SECS} seconds. Try everything, then unlock Pro to export this one.`), 2600);
   videoDims = { w: j.width || video.videoWidth || 1080, h: j.height || video.videoHeight || 1920 };
   $("#fileMeta").textContent = `${fmt(j.duration || video.duration).replace(/\.\d$/, "")} · ${words.length} words`;
