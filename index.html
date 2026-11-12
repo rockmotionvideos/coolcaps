@@ -1596,7 +1596,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.0 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.3 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1840,10 +1840,17 @@ function saveToPhone(it) {
   toast(IS_IOS ? "Saved to Files › Downloads. Open it there and tap Share › Save Video to add it to Photos." : IN_APP ? "If nothing downloaded, open Cool Caps in your browser and save it from there." : "Saved to Downloads. It's in Files and in Google Photos › Library.");
 }
 async function shareVideo(it) {
-  const file = new File([it.blob], it.name, { type: it.type || "video/mp4" });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: niceVid(it.name) }); } catch (e) { if (e && e.name !== "AbortError") toast("Couldn't share. Try Save instead.", true); }
-  } else saveToPhone(it);
+  // plain file name: symbols like $ and long names can make the phone's share sheet refuse the file
+  const ext = ((it.name.match(/\.(\w+)$/) || [])[1] || "mp4").toLowerCase();
+  const plain = (niceVid(it.name).replace(/[^\w\- ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) || "Cool Caps video") + "." + ext;
+  const file = new File([it.blob], plain, { type: it.type || "video/mp4" });
+  if (!(navigator.canShare && navigator.canShare({ files: [file] }))) return saveToPhone(it);
+  try { await navigator.share({ files: [file] }); }
+  catch (e) {
+    if (e && e.name === "AbortError") return;
+    logProblem(`share failed (${mb(it.size)}, ${it.type}): ${(e && (e.name + " " + e.message)) || e}`);
+    toast(`Couldn't share${e && e.name ? " (" + e.name + ")" : ""}. Tap Save to phone, then post it from your gallery.`, true);
+  }
 }
 
 /* ===================== sheets ===================== */
@@ -2510,7 +2517,37 @@ function transcribe(audio, onStatus, opts2 = {}) {
   });
 }
 let objectURL = null, token = 0, wakeLock = null;
+/* Keep working when you leave the app: a Web Lock plus a silent sound make Chrome treat Cool Caps as busy, so it
+   isn't frozen in the background. When the job finishes while you're away, a notification tells you. */
+let keepLock = null, keepAudio = null, keepOn = false;
+function silentWav() {
+  const n = 8000, b = new DataView(new ArrayBuffer(44 + n * 2)), w = (o, t) => [...t].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); b.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt "); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+  b.setUint32(24, 8000, true); b.setUint32(28, 16000, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, "data"); b.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([b], { type: "audio/wav" }));
+}
+function keepAlive(on) {
+  keepOn = on;
+  try {
+    if (on) {
+      if (navigator.locks && !keepLock) navigator.locks.request("coolcaps-busy", () => new Promise((res) => { keepLock = res; })).catch(() => {});
+      if (!IS_IOS) { if (!keepAudio) { keepAudio = new Audio(silentWav()); keepAudio.loop = true; keepAudio.volume = 0.01; } keepAudio.play().catch(() => {}); }
+      if (!store.get("coolcaps.askedNotify") && "Notification" in window && Notification.permission === "default") { store.set("coolcaps.askedNotify", true); Notification.requestPermission().catch(() => {}); }
+    } else {
+      if (keepLock) { keepLock(); keepLock = null; }
+      if (keepAudio) keepAudio.pause();
+    }
+  } catch {}
+}
+async function tellDone(msg) {
+  try {
+    if (!document.hidden || !("Notification" in window) || Notification.permission !== "granted") return;
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification("Cool Caps", { body: msg, icon: "coolcaps-icon-192.png", tag: "coolcaps-done" });
+  } catch {}
+}
 async function keepAwake(on) {
+  keepAlive(on);
   try { if (on && !wakeLock && navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; } } catch { wakeLock = null; }
 }
 /* The phone's gallery only lends the app a video: the link can stop working part-way through (the preview
@@ -2842,6 +2879,7 @@ function showLangBar(j) {
   });
 }
 function onTranscribed(j) {
+  tellDone("Your captions are ready. Tap to pick a style.");
   job = j; words = j.words.map((w) => ({ ...w }));
   resetWorker();  // captions are written: unload the speech engine so the preview and export get the phone's memory
   // give the preview a fresh start now the heavy work is over (a player opened while the phone was busy can be half-broken)
@@ -3831,6 +3869,7 @@ function confetti() {
 }
 function showDone(it) {
   if (view !== "result") return toast("Your video is ready in the Library");
+  tellDone("Your captioned video is ready.");
   $("#resTitle").textContent = "Done";
   const r = $("#result"); r.textContent = "";
   const fr = el("div", "frame"), v = el("video"); v.src = URL.createObjectURL(it.blob); v.controls = true; v.autoplay = true; v.loop = true; v.playsInline = true; fr.append(v);
@@ -3865,6 +3904,7 @@ function showDone(it) {
   r.append(fr, el("h2", "display", lines[(st.count - 1) % lines.length]), badges, share, row, (it.capsOnly ? el("p", "fname", it.capsOnly === "clear" ? "In your editor, put this on a layer above your video. No keying needed." : `In your editor, put this on a layer above your video and remove the ${it.capsOnly} with chroma key.`) : ""), el("p", "fname", (it.kept === false ? "Couldn't keep this one in your Library (your phone's storage may be full). Save it to your phone now · " : "Kept in your Library · ") + it.name));
   if (!isPro() && inPlayApp()) { const wm = el("button", "linkbtn", "Remove the Cool Caps badge with Pro"); wm.onclick = () => paywall(); r.append(wm); }
   if ((IS_IOS && !STANDALONE) || IN_APP) r.append(el("p", "fname", IN_APP ? "Tip: save it now. In-app browsers don't always keep your Library." : "Tip: save it to Photos. Safari can clear the Library if you don't open Cool Caps for a while. Adding Cool Caps to your Home Screen keeps it."));
+  if (it.kept === false) { const w = el("p", "fname", "Heads up: your phone had no room to keep this in the Library. Tap Save to phone so you don't lose it."); w.style.color = "#ffb4a8"; r.append(w); }
   confetti();
 }
 $("#resBack").onclick = () => go(job ? "editor" : "home");
@@ -3904,8 +3944,9 @@ function setupInstall() {
 // phones pause pages in the background: tell people why progress stopped
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
+  if (keepOn) { wakeLock = null; keepAwake(true); }
   const busy = (view === "editor" && !$("#working").hidden && !$("#wBack").textContent.includes("Go back")) || (view === "result" && exporting);
-  if (busy) toast("Keep Cool Caps open until it's done. Phones pause it when you switch apps.");
+  if (busy) logProblem("returned to the app while busy");
 });
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; $("#installHow").textContent = "Opens full screen, like a real app. Tap Install."; });
 window.addEventListener("appinstalled", () => { $("#installCard").hidden = true; toast("Cool Caps is on your home screen"); });

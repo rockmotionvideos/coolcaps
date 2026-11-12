@@ -1,5 +1,5 @@
 // Cool Caps offline helper: keeps the app and its fonts on the phone so it opens without internet.
-const CACHE = "coolcaps-v11";
+const CACHE = "coolcaps-v14";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "coolcaps-icon-192.png", "coolcaps-icon-512.png", "coolcaps-apple-icon.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
