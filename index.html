@@ -597,6 +597,16 @@ body.is-pro .probadge { display: none; }
             <span class="rt"><b>Language</b><span>What's spoken in your videos</span></span>
             <select class="sel" id="langSel" aria-label="Language"></select>
           </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h9M8.5 3v2M6 5c.5 3 2.5 5.500 5.500 7M11 5c-.5 3-3 6-7 8M12 20l4-9 4 9M13.500 17h5"/></svg></span>
+            <span class="rt"><b>Mixed languages</b><span id="mixNote">Off</span></span>
+            <button class="btn ghost small" id="mixBtn">Choose</button>
+          </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span>
+            <span class="rt"><b>Catch language switches</b><span>If a second language is spoken in the video, caption each part in its own language. Slower and warmer, so turn it off if your phone struggles.</span></span>
+            <button class="switch" id="mixSw" role="switch" aria-label="Catch language switches"></button>
+          </div>
         </div>
       </div>
       <div class="group">
@@ -634,6 +644,11 @@ body.is-pro .probadge { display: none; }
             <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></span>
             <span class="rt"><b>Library storage</b><span id="libSize">Videos you make are kept on this phone</span></span>
             <button class="btn ghost small" id="clearLib">Clear</button>
+          </div>
+          <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></span>
+            <span class="rt"><b>Free up space</b><span id="spaceNote">Removes the temporary copy of your video and the downloaded speech models. Your Library stays.</span></span>
+            <button class="btn ghost small" id="freeSpace">Free up</button>
           </div>
         </div>
       </div>
@@ -870,7 +885,7 @@ function groupWords(words, per, smart, gap, opt) {
     const w = ws[i], nxt = ws[i + 1];
     if (pace && !cur.length) want = paceSize(ws, i);
     per = pace ? want : per;
-    cur.push(w); let brk = false;
+    cur.push(w); let brk = !!(nxt && w.lang && nxt.lang && w.lang !== nxt.lang);  // never mix two languages in one caption
     if (smart && nxt) {
       if (SENTENCE_END.test(w.word)) brk = true;
       else if (nxt.start - w.end > gap) brk = true;
@@ -1510,7 +1525,7 @@ const DEFAULTS = {
 };
 const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
 const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
-const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same", vad: true, cloud: true };
+const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same", vad: true, cloud: true, mix: [], mixAuto: true };
 let S = { ...DEFAULTS }, APP = { ...APP_DEFAULTS };
 let words = [], history = [], job = null, view = "home", tool = "style", videoDims = { w: 1080, h: 1920 };
 const store = {
@@ -1596,7 +1611,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.3 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.4 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1797,6 +1812,7 @@ const LIB = {
 // keep a finished video in the Library; returns false (and notes why) if the phone wouldn't store it
 async function keepInLibrary(item) {
   try {
+    await makeRoom(item.size || 0, item.id);
     await LIB.put(item);
     const back = await LIB.run("readonly", (st) => st.getKey(item.id));
     if (back == null) throw new Error("not stored");
@@ -1809,6 +1825,27 @@ async function keepInLibrary(item) {
   }
 }
 const niceVid = (n) => n.replace(/\.(mp4|webm)$/i, "");
+async function usedBytes() { try { const q = await navigator.storage.estimate(); return q.usage || 0; } catch { return null; } }
+async function showSpace() {
+  try {
+    const q = await navigator.storage.estimate(), n = $("#spaceNote"); if (!n) return;
+    n.textContent = `Using ${mb(q.usage || 0)} of ${mb(q.quota || 0)}. Frees the temporary copy of your video and the downloaded speech models (they download again next time). Your Library stays.`;
+  } catch {}
+}
+// Make room before saving a finished video: drop the oldest ones until it fits, and keep the Library under ~1.5 GB
+async function makeRoom(need, keepId) {
+  let removed = 0;
+  try {
+    const items = ((await LIB.all()) || []).filter((x) => x.id !== keepId).sort((a, b) => a.mtime - b.mtime);
+    let total = items.reduce((a, x) => a + (x.size || 0), 0) + need;
+    const q = await navigator.storage.estimate();
+    let free = (q.quota || 0) - (q.usage || 0);
+    while (items.length && (total > 1.5e9 || (q.quota && free < need * 1.25 + 8e7))) {
+      const old = items.shift(); await LIB.del(old.id); removed++; total -= old.size || 0; free += old.size || 0;
+    }
+  } catch {}
+  if (removed) { logProblem(`library: removed ${removed} older video${removed > 1 ? "s" : ""} to make room`); toast(`Removed ${removed} older video${removed > 1 ? "s" : ""} from the Library to make room`); }
+}
 async function loadRecent() {
   let items = [];
   try { items = (await LIB.all()) || []; } catch { items = []; }
@@ -2002,7 +2039,7 @@ function openPlayer(it) {
 /* ===================== settings ===================== */
 const LANGS = [["", "Auto-detect (any language)"], ["af", "Afrikaans"], ["sq", "Albanian"], ["am", "Amharic"], ["ar", "Arabic"], ["hy", "Armenian"], ["as", "Assamese"], ["az", "Azerbaijani"], ["ba", "Bashkir"], ["eu", "Basque"], ["be", "Belarusian"], ["bn", "Bengali"], ["bs", "Bosnian"], ["br", "Breton"], ["bg", "Bulgarian"], ["my", "Burmese"], ["yue", "Cantonese"], ["ca", "Catalan"], ["zh", "Chinese"], ["hr", "Croatian"], ["cs", "Czech"], ["da", "Danish"], ["nl", "Dutch"], ["en", "English"], ["et", "Estonian"], ["fo", "Faroese"], ["fi", "Finnish"], ["fr", "French"], ["gl", "Galician"], ["ka", "Georgian"], ["de", "German"], ["el", "Greek"], ["gu", "Gujarati"], ["ht", "Haitian Creole"], ["ha", "Hausa"], ["haw", "Hawaiian"], ["he", "Hebrew"], ["hi", "Hindi"], ["hu", "Hungarian"], ["is", "Icelandic"], ["id", "Indonesian"], ["it", "Italian"], ["ja", "Japanese"], ["jw", "Javanese"], ["kn", "Kannada"], ["kk", "Kazakh"], ["km", "Khmer"], ["ko", "Korean"], ["lo", "Lao"], ["la", "Latin"], ["lv", "Latvian"], ["ln", "Lingala"], ["lt", "Lithuanian"], ["lb", "Luxembourgish"], ["mk", "Macedonian"], ["mg", "Malagasy"], ["ms", "Malay"], ["ml", "Malayalam"], ["mt", "Maltese"], ["mi", "Maori"], ["mr", "Marathi"], ["mn", "Mongolian"], ["ne", "Nepali"], ["no", "Norwegian"], ["nn", "Nynorsk"], ["oc", "Occitan"], ["ps", "Pashto"], ["fa", "Persian"], ["pl", "Polish"], ["pt", "Portuguese"], ["pa", "Punjabi"], ["ro", "Romanian"], ["ru", "Russian"], ["sa", "Sanskrit"], ["sr", "Serbian"], ["sn", "Shona"], ["sd", "Sindhi"], ["si", "Sinhala"], ["sk", "Slovak"], ["sl", "Slovenian"], ["so", "Somali"], ["es", "Spanish"], ["su", "Sundanese"], ["sw", "Swahili"], ["sv", "Swedish"], ["tl", "Tagalog"], ["tg", "Tajik"], ["ta", "Tamil"], ["tt", "Tatar"], ["te", "Telugu"], ["th", "Thai"], ["bo", "Tibetan"], ["tr", "Turkish"], ["tk", "Turkmen"], ["uk", "Ukrainian"], ["ur", "Urdu"], ["uz", "Uzbek"], ["vi", "Vietnamese"], ["cy", "Welsh"], ["yi", "Yiddish"], ["yo", "Yoruba"]];
 const ACC_NOTE = { base: "Fastest, smallest download. Good for clear speech.", small: "Right for most videos.", medium: "More accurate, a bit slower and a bigger download.", max: "The most accurate by far, especially for Arabic and other non-English languages. Big one-time download (several hundred MB, use Wi-Fi) and slower to transcribe." };
-const Q_NOTE = { standard: "1080p and lighter, quick to upload.", high: "Same size and frame rate as your video, with matching detail.", max: "Same size as your video with extra detail. Biggest files." };
+const Q_NOTE = { standard: "1080p and lighter, quick to upload.", high: "Same size and frame rate as your video, with matching detail. Big files take more space and battery.", max: "Same size as your video with extra detail. Biggest files." };
 function buildSettings() {
   const sel = $("#langSel"); LANGS.forEach(([v, l]) => { const o = el("option", "", l); o.value = v; sel.append(o); });
   sel.onchange = () => { APP.lang = sel.value; saveApp(); $("#homeLang").value = APP.lang; };
@@ -2017,6 +2054,39 @@ function buildSettings() {
   }));
   $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
+  $("#mixSw").onclick = () => { APP.mixAuto = APP.mixAuto === false; saveApp(); syncSettings(); toast(APP.mixAuto ? "Language switches will be caught" : "One language per video"); };
+  $("#mixBtn").onclick = () => openSheet((sh) => {
+    const set = new Set(APP.mix || []), common = ["ar", "en", "fr", "es", "hi", "ru", "tr", "pt", "de", "it", "fa", "he"];
+    sh.append(el("h3", "display", "Languages you mix"), el("p", "sub", "Pick 2 or 3 if you switch between them in one video, like Arabic and English. Cool Caps then checks every part of the video and captions each one in the right language. Leave empty and it works it out itself."));
+    const grid = el("div", "langgrid");
+    const save = () => { APP.mix = [...set]; saveApp(); syncSettings(); };
+    const draw = () => {
+      grid.textContent = "";
+      [...set, ...common.filter((c) => !set.has(c))].forEach((c) => {
+        const b = el("button", "btn " + (set.has(c) ? "primary" : "ghost"), langName(c));
+        b.onclick = () => { if (set.has(c)) set.delete(c); else if (set.size < 3) set.add(c); else return toast("Up to 3 languages", true); save(); draw(); };
+        grid.append(b);
+      });
+    };
+    draw();
+    const sel = el("select", "bigselect"); const o0 = el("option", "", "Another language…"); o0.value = ""; sel.append(o0);
+    LANGS.forEach(([v, l]) => { if (v) { const o = el("option", "", l); o.value = v; sel.append(o); } });
+    sel.onchange = () => { if (sel.value && set.size < 3) { set.add(sel.value); save(); draw(); } else if (sel.value) toast("Up to 3 languages", true); sel.value = ""; };
+    const ok = el("button", "btn primary block", "Done"); ok.onclick = closeSheet;
+    sh.append(grid, sel, ok);
+  });
+  $("#freeSpace").onclick = async (e) => {
+    const b = e.currentTarget;
+    if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Sure?"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Free up"; }, 4000); return; }
+    b.dataset.sure = ""; b.textContent = "Free up";
+    const before = await usedBytes();
+    resetWorker();
+    try { const d = await navigator.storage.getDirectory(); await d.removeEntry("working-video"); } catch {}
+    try { for (const k of await caches.keys()) if (!/^coolcaps-v/.test(k)) await caches.delete(k); } catch {}
+    const after = await usedBytes();
+    toast(before && after != null ? `Freed ${mb(Math.max(0, before - after))}` : "Cleaned up", false);
+    showSpace();
+  };
   $("#rememberSw").onclick = () => { APP.remember = !APP.remember; saveApp(); if (APP.remember) persist(); };
   $("#resetStyle").onclick = () => { setS({ ...DEFAULTS, ...lookFor("karaoke") }); toast("Caption style reset"); };
   $("#clearLib").onclick = async (e) => {
@@ -2059,6 +2129,9 @@ function syncSettings() {
   $("#qMax").classList.toggle("locked", !isPro());
   $("#accNote").textContent = (APP.modelPicked ? "" : "Picked automatically for your phone. ") + (ACC_NOTE[chosenModel()] || "") + (IS_IOS ? " On iPhone, Cool Caps uses the lighter models, because Safari gives web pages less memory." : ""); $("#qNote").textContent = Q_NOTE[APP.quality] || "";
   $("#langSel").value = APP.lang; $("#rememberSw").setAttribute("aria-checked", APP.remember);
+  $("#mixSw").setAttribute("aria-checked", APP.mixAuto !== false);
+  $("#mixNote").textContent = (APP.mix || []).length >= 2 ? (APP.mix.map(langName).join(" + ") + (APP.lang ? ". Used when the spoken language is Auto-detect." : "")) : "Off. Pick 2 or 3 if you switch languages in one video (like Arabic and English).";
+  showSpace();
 }
 
 /* ===================== editor controls ===================== */
@@ -2216,9 +2289,9 @@ function setWorking(on, { pct = null, stage = "", note = "", error = false, slow
 const WORKER_SRC = `
 import { pipeline, env, Tensor } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
 env.allowLocalModels = false;
-const THREADS = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)) : 1;
+const THREADS = self.crossOriginIsolated ? Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) - 1)) : 1;
 env.backends.onnx.wasm.numThreads = THREADS;
-let asr = null, current = "", device = "";
+let asr = null, current = "", device = "", pending = null, pendingKey = "", coolUntil = 0, LT = null;
 async function load(model, device) {
   const big = /large/.test(model);
   const opts = device === "webgpu"
@@ -2226,96 +2299,167 @@ async function load(model, device) {
     : { device: "wasm", dtype: big ? { encoder_model: "q4", decoder_model_merged: "q4" } : "q8" };
   return pipeline("automatic-speech-recognition", model, { ...opts, progress_callback: (p) => postMessage({ type: "progress", p }) });
 }
-// Whisper's own language check: listen to (up to) 30 seconds from the busiest part, take one
-// decoder step after <|startoftranscript|> and pick the most likely language token.
-// Without this the library quietly assumes English.
+// load (or switch) the speech model once, even if it is asked for twice at the same time (warm-up + real job)
+async function ensure(model, cpu) {
+  if (asr && current === model && !(cpu && device === "webgpu")) return;
+  const key = model + "|" + (cpu ? "cpu" : "auto");
+  if (pending && pendingKey === key) return pending;
+  pendingKey = key;
+  pending = (async () => {
+    postMessage({ type: "loading" });
+    if (asr) { try { await asr.dispose(); } catch (e) {} asr = null; }
+    LT = null;
+    let dev = !cpu && self.navigator && self.navigator.gpu ? "webgpu" : "wasm";
+    try { asr = await load(model, dev); }
+    catch (err) {
+      if (dev === "webgpu") { dev = "wasm"; try { asr = await load(model, dev); } catch (e2) { err = e2; asr = null; } }
+      if (!asr && env.backends.onnx.wasm.numThreads > 1) { env.backends.onnx.wasm.numThreads = 1; asr = await load(model, "wasm"); }
+      if (!asr) throw err;
+    }
+    current = model; device = dev;
+  })();
+  try { await pending; } finally { pending = null; }
+}
+// Whisper's own language check: listen to (up to) 30 seconds, take one decoder step after
+// <|startoftranscript|> and read how likely each language token is. Without this the library quietly assumes English.
 const WHISPER_LANGS = "en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su".split(" ");
+// languages the small models get badly wrong: when one of these is spoken, a bigger model is worth the wait
+const HARD = ["ar", "fa", "ur", "he", "hi"];
+// Arabic speech (especially dialects like Lebanese) is often mistaken for these neighbours
+const ARAB_LIKE = ["fa", "ur", "ps", "sd", "he", "mt", "ku", "tr"];
+function langTok() {
+  if (LT) return LT;
+  const tok = asr.tokenizer;
+  // special tokens like <|ar|> live in the tokenizer's "added tokens", not the normal word list
+  const idOf = (t) => {
+    let id;
+    try { id = tok.model && tok.model.tokens_to_ids && tok.model.tokens_to_ids.get(t); } catch (e) {}
+    if (id == null && Array.isArray(tok.added_tokens)) { const a = tok.added_tokens.find((x) => x.content === t); if (a) id = a.id; }
+    if (id == null) { try { const e = tok.encode(t, { add_special_tokens: false }); if (e.length === 1) id = e[0]; } catch (e) {} }
+    return id;
+  };
+  const sot = idOf("<|startoftranscript|>"); if (sot == null) throw new Error("no start token");
+  const langs = [];
+  for (const c of WHISPER_LANGS) { const id = idOf("<|" + c + "|>"); if (id != null) langs.push([c, id]); }
+  if (!langs.length) throw new Error("no language tokens");
+  LT = { sot, langs }; return LT;
+}
+// how likely each language is for this piece of audio (a Map of language code to 0..1)
+async function langProbs(slice) {
+  const { sot, langs } = langTok();
+  const { input_features } = await asr.processor(slice);
+  const out = await asr.model({ input_features, decoder_input_ids: new Tensor("int64", new BigInt64Array([BigInt(sot)]), [1, 1]) });
+  const V = out.logits.dims.at(-1), data = out.logits.data, base = data.length - V;
+  let mx = -Infinity; for (const [, id] of langs) mx = Math.max(mx, data[base + id]);
+  let sum = 0; const ex = langs.map(([c, id]) => { const v = Math.exp(data[base + id] - mx); sum += v; return [c, v]; });
+  return new Map(ex.map(([c, v]) => [c, v / sum]));
+}
 async function detectLanguage(audio, hint, detectAt) {
   try {
-    const tok = asr.tokenizer;
-    // special tokens like <|ar|> live in the tokenizer's "added tokens", not the normal word list
-    const idOf = (t) => {
-      let id;
-      try { id = tok.model && tok.model.tokens_to_ids && tok.model.tokens_to_ids.get(t); } catch {}
-      if (id == null && Array.isArray(tok.added_tokens)) { const a = tok.added_tokens.find((x) => x.content === t); if (a) id = a.id; }
-      if (id == null) { try { const e = tok.encode(t, { add_special_tokens: false }); if (e.length === 1) id = e[0]; } catch {} }
-      return id;
-    };
-    const sot = idOf("<|startoftranscript|>"); if (sot == null) throw new Error("no start token");
-    const langs = [];
-    for (const c of WHISPER_LANGS) { const id = idOf("<|" + c + "|>"); if (id != null) langs.push([c, id]); }
-    if (!langs.length) return null;
     // listen where someone is talking (the app's speech detector tells us), not at a bark or a bang
     const SR = 16000, win = 30 * SR;
     let start = Math.max(0, Math.round((detectAt || 0) * SR));
     if (!detectAt) for (let i = 0; i < audio.length; i += SR / 10) { let e = 0; for (let k = i; k < Math.min(audio.length, i + SR / 10); k++) e += audio[k] * audio[k]; if (e / (SR / 10) > 1e-4) { start = Math.max(0, i - SR / 2); break; } }
-    const starts = [start]; if (audio.length - start > 50 * SR) starts.push(Math.floor((start + audio.length) / 2) - win / 2);  // long video: listen twice
+    const starts = [start];
+    if (audio.length - start > 50 * SR) starts.push(Math.max(0, Math.floor((start + audio.length) / 2) - win / 2));  // long video: listen in the middle too
+    if (audio.length - start > 120 * SR) starts.push(Math.max(0, Math.floor(start + (audio.length - start) * 0.82) - win / 2));  // and near the end
     const probs = new Map();
     for (const st of starts) {
-      const { input_features } = await asr.processor(audio.slice(st, st + win));
-      const out = await asr.model({ input_features, decoder_input_ids: new Tensor("int64", new BigInt64Array([BigInt(sot)]), [1, 1]) });
-      const V = out.logits.dims.at(-1), data = out.logits.data, base = data.length - V;
-      let mx = -Infinity; for (const [, id] of langs) mx = Math.max(mx, data[base + id]);
-      let sum = 0; const ex = langs.map(([c, id]) => { const v = Math.exp(data[base + id] - mx); sum += v; return [c, v]; });
-      for (const [c, v] of ex) probs.set(c, (probs.get(c) || 0) + v / sum / starts.length);
+      const p = await langProbs(audio.slice(st, st + win));
+      for (const [c, v] of p) probs.set(c, (probs.get(c) || 0) + v / starts.length);
     }
     const ranked = [...probs].sort((a, b) => b[1] - a[1]), [top, conf] = ranked[0];
     // not sure? go with the phone's own language if Whisper thinks it's plausible
     const hp = probs.get(hint) || 0;
     let lang = top;
     if (hint && top !== hint && ((conf < 0.6 && hp > 0.1) || conf < 0.35)) lang = hint;
-    return { lang, conf: lang === top ? conf : hp, top: ranked.slice(0, 3).map(([c, p]) => c + " " + Math.round(p * 100) + "%").join(", ") };
+    // Arabic dialects often look like Persian, Urdu, Hebrew, Maltese: if Arabic is also a real possibility, it is Arabic
+    if (ARAB_LIKE.includes(lang) && (probs.get("ar") || 0) >= 0.12) lang = "ar";
+    return { lang, conf: lang === top ? conf : (probs.get(lang) || hp), top: ranked.slice(0, 3).map(([c, p]) => c + " " + Math.round(p * 100) + "%").join(", "), probs };
   } catch (err) { postMessage({ type: "warn", message: "language check failed: " + (err && err.message || err) }); return null; }
 }
 self.onmessage = async (e) => {
-  const { audio, model, language, translate } = e.data;
+  const d = e.data;
+  if (d.cool) { coolUntil = Date.now() + 40000; return; }
+  if (d.warm) {
+    try { await ensure(d.model, d.cpu); postMessage({ type: "warmed" }); }
+    catch (err) { postMessage({ type: "warn", message: "warm-up failed: " + ((err && err.message) || err) }); }
+    return;
+  }
+  const { audio, model, language, translate } = d;
   try {
-    if (!asr || current !== model || (e.data.cpu && device === "webgpu")) {
-      postMessage({ type: "loading" });
-      let dev = !e.data.cpu && self.navigator && self.navigator.gpu ? "webgpu" : "wasm";
-      try { asr = await load(model, dev); }
-      catch (err) {
-        if (dev === "webgpu") { dev = "wasm"; try { asr = await load(model, dev); } catch (e2) { err = e2; asr = null; } }
-        if (!asr && env.backends.onnx.wasm.numThreads > 1) { env.backends.onnx.wasm.numThreads = 1; asr = await load(model, "wasm"); }
-        if (!asr) throw err;
-      }
-      current = model; device = dev;
-    }
+    await ensure(model, d.cpu);
     postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
-    let lang = language;
-    if (!lang && !e.data.noDetect) {
-      postMessage({ type: "detecting" });
-      const r = await detectLanguage(audio, e.data.hint, e.data.detectAt || 0);
-      lang = r && r.lang; postMessage({ type: "detected", lang, conf: r && r.conf, top: r && r.top });
+    let lang = language, cands = null;
+    const mix = Array.isArray(d.mix) ? d.mix.filter(Boolean).slice(0, 4) : [];
+    if (!lang && !d.noDetect) {
+      if (mix.length >= 2) { cands = mix; lang = mix[0]; }   // the person told us which languages they mix
+      else {
+        postMessage({ type: "detecting" });
+        const r = await detectLanguage(audio, d.hint, d.detectAt || 0);
+        lang = r && r.lang; postMessage({ type: "detected", lang, conf: r && r.conf, top: r && r.top });
+        // a second language that is clearly there too? then check every part of the video separately
+        if (r && r.probs && lang && !d.single) {
+          let strong = [...r.probs].filter(([c, p]) => p >= 0.2).sort((a, b) => b[1] - a[1]).map(([c]) => c);
+          if (strong.includes("ar") || lang === "ar") strong = strong.filter((c) => !ARAB_LIKE.includes(c));
+          if (!strong.includes(lang)) strong.unshift(lang);
+          if (strong.length >= 2) cands = strong.slice(0, 3);
+        }
+      }
     }
+    // Arabic and its neighbours: the bigger model understands dialects far better, so switch up if allowed
+    if (d.upgrade && current !== d.upgrade && [lang].concat(cands || []).some((c) => HARD.includes(c))) {
+      postMessage({ type: "upgrading" });
+      try { await ensure(d.upgrade, d.cpu); }
+      catch (err) { postMessage({ type: "warn", message: "bigger model failed: " + ((err && err.message) || err) }); await ensure(model, d.cpu); }
+      postMessage({ type: "device", device, threads: env.backends.onnx.wasm.numThreads });
+    }
+    const perChunk = !!cands && cands.length >= 2;
+    if (perChunk) postMessage({ type: "mixed", langs: cands });
     postMessage({ type: "stage" });
-    // translate: Whisper writes English captions straight from the foreign speech (skipped if it's already English)
-    const opts = { return_timestamps: "word", task: translate && lang !== "en" ? "translate" : "transcribe" };
-    if (lang) opts.language = lang;
-    // Cut the audio into pieces of up to 30 s (Whisper's window), splitting in the quietest spot
-    // so no word gets chopped. No overlap needed, which saves about a third of the work,
-    // and we can show real progress after every piece.
-    const SR = 16000, MAX = 30 * SR, total = audio.length, words = [];
-    let pos = 0;
+    // Cut the audio into pieces of up to 30 s (Whisper's window; 20 s when several languages are mixed, so a switch
+    // is caught sooner), splitting in the quietest spot so no word gets chopped. Real progress after every piece.
+    const SR = 16000, MAX = (perChunk ? 20 : 30) * SR, total = audio.length, words = [];
+    let pos = 0, cur = perChunk ? null : lang, bestRate = Infinity;
     while (pos < total) {
+      const tStart = performance.now();
       let end = Math.min(total, pos + MAX);
       if (end < total) {
         let best = end, bestE = Infinity;
-        for (let i = pos + 20 * SR; i + 1600 <= end; i += 800) { let e2 = 0; for (let k = i; k < i + 1600; k += 4) e2 += audio[k] * audio[k]; if (e2 < bestE) { bestE = e2; best = i + 800; } }
+        for (let i = pos + MAX - 10 * SR; i + 1600 <= end; i += 800) { let e2 = 0; for (let k = i; k < i + 1600; k += 4) e2 += audio[k] * audio[k]; if (e2 < bestE) { bestE = e2; best = i + 800; } }
         end = best;
       }
       if (end - pos > SR / 4) {
-        const out = await asr(audio.slice(pos, end), opts), off = pos / SR;
+        const piece = audio.slice(pos, end), off = pos / SR;
+        if (perChunk) {
+          try {
+            const p = await langProbs(piece);
+            let tot = 0; for (const c of cands) tot += p.get(c) || 0;
+            const ranked = cands.map((c) => [c, (p.get(c) || 0) / (tot || 1)]).sort((a, b) => b[1] - a[1]);
+            // switch language only when clearly sure, so a noisy piece can't flip it
+            if (cur == null || (ranked[0][0] !== cur && ranked[0][1] >= 0.6)) cur = ranked[0][0];
+          } catch (err) { if (cur == null) cur = cands[0]; }
+        }
+        const opts = { return_timestamps: "word", task: translate && cur !== "en" ? "translate" : "transcribe" };
+        if (cur) opts.language = cur;
+        postMessage({ type: "chunklang", lang: cur });
+        const out = await asr(piece, opts);
         for (const c of out.chunks || []) {
           const w = String(c.text || "").trim(); if (!w) continue;
           let [s0, s1] = c.timestamp || [0, 0];
           s0 = s0 == null ? (words.length ? words[words.length - 1].end : off) : s0 + off;
           s1 = s1 == null ? s0 + 0.3 : s1 + off; if (s1 <= s0) s1 = s0 + 0.3;
-          words.push({ word: w, start: s0, end: s1 });
+          words.push({ word: w, start: s0, end: s1, lang: cur || undefined });
         }
       }
+      // keep the phone cool: if it is getting slower (it is heating up) or the system says it is hot, rest a moment
+      const secs = (end - pos) / SR, rate = (performance.now() - tStart) / 1000 / Math.max(1, secs);
+      let rest = 0;
+      if (secs >= 8) { if (rate < bestRate) bestRate = rate; else if (rate > bestRate * 1.4) rest = Math.min(6, rate * secs * 0.5); }
+      if (Date.now() < coolUntil) rest = Math.max(rest, 3);
       pos = end;
       postMessage({ type: "chunk", done: pos / total });
+      if (rest > 0 && pos < total) { postMessage({ type: "cooling", secs: rest }); await new Promise((r) => setTimeout(r, rest * 1000)); }
     }
     postMessage({ type: "done", words });
   } catch (err) { postMessage({ type: "error", message: String((err && err.message) || err) }); }
@@ -2452,23 +2596,44 @@ function phoneLang() {
   return LANGS.some((l) => l[0] === c) ? c : "en";
 }
 const langName = (c) => (LANGS.find((l) => l[0] === c) || [, c])[1];
+function pickModelKey() {
+  let mkey = chosenModel(); if (APP.out === "en" && mkey === "max") mkey = "medium";  // Max can't translate
+  if (IS_IOS && (mkey === "medium" || mkey === "max")) mkey = "small";  // iPhones give web pages too little memory for the big models
+  return mkey;
+}
+// Start loading the speech model while the video is still being copied and its sound read, so there's less waiting after
+function warmUp() {
+  try {
+    if (FAKE || useCloud() || IS_IOS || (navigator.deviceMemory && navigator.deviceMemory <= 3)) return;
+    getWorker().postMessage({ warm: true, model: MODELS[pickModelKey()] || MODELS.small, cpu: APP.engine !== "gpu" });
+  } catch {}
+}
+// Tidy Arabic-script words: drop vowel marks and stretching, and fix Persian look-alike letters the model sometimes mixes in
+function cleanWords(ws) {
+  return (ws || []).map((w) => {
+    if (!/[\u0600-\u06ff]/.test(w.word)) return w;
+    const t = w.word.replace(/[\u064b-\u065f\u0670\u0640]/g, "").replace(/\u06cc/g, "\u064a").replace(/\u06a9/g, "\u0643").replace(/\u06c0/g, "\u0647");
+    return t === w.word ? w : { ...w, word: t || w.word };
+  });
+}
 function transcribe(audio, onStatus, opts2 = {}) {
   detectedLang = ""; detectFailed = false;
   if (FAKE) return fetch("words.json").then((r) => r.json());
   return new Promise((resolve, reject) => {
     const w = getWorker(), files = {}, t0 = performance.now(), len = audio.length / 16000;
-    let timer = null, tStage = t0, engine = "phone", devKind = "wasm", rateKey = "", est = 0, done = 0;
+    let timer = null, tStage = t0, engine = "phone", devKind = "wasm", rateKey = "", est = 0, done = 0, coolTill = 0, mixedNames = "", po = null;
     const tick = () => {
       if (asrWorker !== w) { clearInterval(timer); return; }  // cancelled
       const el2 = (performance.now() - tStage) / 1000, left = est - el2;
       const pct = Math.max(done, Math.min(0.97, est ? el2 / est : 0));
       const slow = devKind === "webgpu" && done < 1 && el2 > Math.max(45, est * 2.5);
       const tr = APP.out === "en" && detectedLang !== "en" && (detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en";
-      onStatus({ pct, stage: (tr ? "Translating your video" : "Transcribing your video") + (detectedLang ? " · " + langName(detectedLang) + (tr ? " → English" : "") : ""), slow, cancel: true,
-        note: slow ? `This is taking longer than it should on your ${engine}. You can keep waiting, or start again on the faster setting.`
+      onStatus({ pct, stage: (tr ? "Translating your video" : "Transcribing your video") + (mixedNames ? " · " + mixedNames : detectedLang ? " · " + langName(detectedLang) + (tr ? " → English" : "") : ""), slow, cancel: true,
+        note: performance.now() < coolTill ? "Giving your phone a moment to cool down, then carrying on…"
+          : slow ? `This is taking longer than it should on your ${engine}. You can keep waiting, or start again on the faster setting.`
           : (done >= 1 ? "Finishing up…" : left > 1.5 ? `About ${secsText(left)} left` : "Almost done…") + ` · using your ${engine}` });
     };
-    const finish = () => { clearInterval(timer); w.onmessage = null; w.onerror = null; };
+    const finish = () => { clearInterval(timer); w.onmessage = null; w.onerror = null; try { po && po.disconnect(); } catch {} };
     w.onmessage = (e) => {
       const m = e.data;
       if (m.type === "progress") {
@@ -2481,7 +2646,10 @@ function transcribe(audio, onStatus, opts2 = {}) {
       } else if (m.type === "detecting") inflight({ stage: "detecting" }), onStatus({ pct: null, stage: "Detecting the language", note: "Listening to the first few seconds…" });
       else if (m.type === "detected" && !m.lang) { detectFailed = true; }
       else if (m.type === "detected") { detectedLang = m.lang; detectConf = m.conf == null ? 1 : m.conf; lastTop = m.top || ""; const n = langName(m.lang); onStatus({ pct: null, stage: "Heard " + n, note: "Transcribing in " + n + "." }); }
-      else if (m.type === "warn") console.warn(m.message);
+      else if (m.type === "warn") { console.warn(m.message); logProblem("speech engine: " + m.message); }
+      else if (m.type === "mixed") { mixedNames = m.langs.map(langName).join(" + "); onStatus({ pct: null, stage: "Heard " + mixedNames, note: "Checking each part of the video, so every language gets captioned properly. This takes a little longer.", cancel: true }); logProblem("mixed languages: " + m.langs.join("+")); }
+      else if (m.type === "upgrading") onStatus({ pct: null, stage: "Switching to the stronger model", note: "Arabic and similar languages come out far better on a bigger model. First time only, it downloads once.", cancel: true });
+      else if (m.type === "cooling") { coolTill = performance.now() + m.secs * 1000; tick(); }
       else if (m.type === "device") inflight({ stage: "loaded" }), lastEngine = m.device + (m.threads > 1 ? "×" + m.threads : ""), devKind = m.device, engine = m.device === "webgpu" ? "phone's graphics chip" : m.threads > 1 ? `phone's processor (${m.threads} cores)` : "phone's processor";
       else if (m.type === "chunk") {
         // real progress: re-estimate the total time from how fast the finished pieces went
@@ -2499,21 +2667,25 @@ function transcribe(audio, onStatus, opts2 = {}) {
       } else if (m.type === "done") {
         // remember how fast this phone is, so next time's estimate is spot on
         if (len > 5) store.set("coolcaps.rate." + rateKey, +(((performance.now() - tStage) / 1000) / len).toFixed(3));
-        finish(); inflight(null); resolve(splitLongWords(m.words));
+        finish(); inflight(null); resolve(splitLongWords(cleanWords(m.words)));
       }
       else if (m.type === "error") { finish(); inflight(null); reject(new Error(m.message + (/fetch|network|Failed/i.test(m.message) ? " Check your internet for the first download, then try again." : ""))); }
     };
     w.onerror = (e) => { finish(); inflight(null); asrWorker = null; reject(new Error("The speech engine stopped: " + (e.message || "unknown error") + ". Check your internet for the first download, then try again.")); };
     const translate = APP.out === "en";
-    let mkey = chosenModel(); if (translate && mkey === "max") mkey = "medium";  // Max can't translate
-    if (IS_IOS && (mkey === "medium" || mkey === "max")) mkey = "small";  // iPhones give web pages too little memory for the big models
+    const mkey = pickModelKey();
     inflight({ model: mkey, stage: "loading", ios: IS_IOS });
+    // if the phone reports it is running hot, tell the speech engine to rest between pieces
+    try { if ("PressureObserver" in window) { po = new PressureObserver((r) => { const st = r && r.length && r[r.length - 1].state; if (st === "serious" || st === "critical") w.postMessage({ cool: true }); }); po.observe("cpu", { sampleInterval: 2000 }).catch(() => {}); } } catch {}
     // phones where the language check crashed: skip it and use the language picked on the home screen (or English)
     // iPhones: the language check is the step that runs out of memory, so skip it and use the phone's language
     const noDetect = !!store.get("coolcaps.noDetect") || IS_IOS;
     const forced = oneOffLang || APP.lang;
     const language = forced || (noDetect ? phoneLang() : null);
-    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language, cpu: APP.engine !== "gpu", translate, noDetect, hint: phoneLang(), detectAt: opts2.detectAt || 0 }, [audio.buffer]);
+    // phones with room for it: when Arabic (or a close language) is heard, step up from the light model to a stronger one
+    const upgrade = !APP.modelPicked && !IS_IOS && mkey !== "medium" && mkey !== "max" && (navigator.deviceMemory || 4) >= 4 ? MODELS.medium : null;
+    const mix = !forced && !noDetect && APP.mixAuto !== false ? (APP.mix || []) : [];
+    w.postMessage({ audio, model: MODELS[mkey] || MODELS.small, language, cpu: APP.engine !== "gpu", translate, noDetect, hint: phoneLang(), detectAt: opts2.detectAt || 0, upgrade, mix, single: APP.mixAuto === false || noDetect }, [audio.buffer]);
   });
 }
 let objectURL = null, token = 0, wakeLock = null;
@@ -2589,6 +2761,7 @@ async function startFile(file) {
   words = []; history = []; job = null; lastWord = lastRow = -1;
   $("#transcript").textContent = ""; $("#langBar").hidden = true;
   if (objectURL) { URL.revokeObjectURL(objectURL); objectURL = null; video.removeAttribute("src"); video.load(); }
+  warmUp();
   if (!OWN.has(file)) {
     go("editor"); setTool("style");
     $("#fileName").textContent = file.name.replace(/\.[^.]+$/, ""); $("#fileMeta").textContent = mb(file.size);
@@ -2674,6 +2847,12 @@ async function startFile(file) {
   ws = fixed.words;
   try { meta.voices = analyzeVoice(keep, ws); } catch (e) { logProblem("voice analysis: " + e.message); }
   meta.timingFixed = fixed.fixed;
+  { // which languages were actually spoken (more than one when the person switches mid-video)
+    const lc = {}; ws.forEach((w) => { if (w.lang) lc[w.lang] = (lc[w.lang] || 0) + 1; });
+    meta.langs = Object.keys(lc).sort((a, b) => lc[b] - lc[a]).filter((c) => lc[c] >= 3 || lc[c] / ws.length >= 0.05);
+    if (meta.langs.length && !(detectedLang && meta.langs.includes(detectedLang))) detectedLang = meta.langs[0];
+    if (meta.langs.length < 2) meta.langs = [];
+  }
   meta.lang = oneOffLang || APP.lang || detectedLang || (store.get("coolcaps.noDetect") || IS_IOS ? phoneLang() : "");
   meta.translated = APP.out === "en" && !!meta.lang && meta.lang !== "en";
   meta.langForced = !!(oneOffLang || APP.lang); meta.langConf = detectConf; meta.langTop = lastTop;
@@ -2863,11 +3042,12 @@ let currentFile = null;
 function showLangBar(j) {
   const bar = $("#langBar"), lang = j.lang;
   if (!lang) { bar.hidden = true; return; }
-  const unsure = !j.langForced && (lang !== phoneLang() || (j.langConf != null && j.langConf < 0.6));
+  const mixed = !j.langForced && j.langs && j.langs.length > 1;
+  const unsure = !mixed && !j.langForced && (lang !== phoneLang() || (j.langConf != null && j.langConf < 0.6));
   bar.hidden = false; bar.classList.toggle("warn", unsure);
-  bar.innerHTML = `🌐 ${langName(lang)}${unsure ? " · <u>Wrong? Tap</u>" : ""}`;
+  bar.innerHTML = mixed ? `🌐 ${j.langs.map(langName).join(" + ")} · <u>Mixed</u>` : `🌐 ${langName(lang)}${unsure ? " · <u>Wrong? Tap</u>" : ""}`;
   bar.onclick = () => openSheet((sh) => {
-    sh.append(el("h3", "display", "What language is spoken?"), el("p", "sub", `Cool Caps heard ${langName(lang)}. Pick the right one and the captions are redone.`));
+    sh.append(el("h3", "display", "What language is spoken?"), el("p", "sub", mixed ? `Cool Caps heard ${j.langs.map(langName).join(" + ")} and captioned each part in its own language. If it's really just one language, pick it and the captions are redone.` : `Cool Caps heard ${langName(lang)}. Pick the right one and the captions are redone.`));
     const quick = [...new Set([phoneLang(), "en", lang, "ar", "es", "fr", "hi", "pt", "de", "it", "tr", "zh"])].slice(0, 10);
     const grid = el("div", "langgrid");
     const redo = (code) => { closeSheet(); oneOffLang = code; toast(`Redoing the captions in ${langName(code)}…`); startFile(currentFile); };
@@ -2891,7 +3071,7 @@ function onTranscribed(j) {
   if (j.timingFixed) toast("The timing came back scrambled (common with background noise), so the words are spread over the video. Check them in Edit words.", true);
   else if (detectFailed) toast("Couldn't tell the language, so it used your phone's language. Wrong? Tap the language at the top of the video.", true);
   else if (APP.out === "en" && (detectedLang || APP.lang) && (detectedLang || APP.lang) !== "en") toast(`${words.length} words · translated from ${langName(detectedLang || APP.lang)} to English.` + (lastEngine === "cloud" ? "" : " Word timing can be a little looser when translating."));
-  else toast(`${words.length} words transcribed` + (detectedLang ? ` · ${langName(detectedLang)}` : ""));
+  else toast(`${words.length} words transcribed` + (j.langs && j.langs.length > 1 ? ` · ${j.langs.map(langName).join(" + ")}` : detectedLang ? ` · ${langName(detectedLang)}` : ""));
   if (!store.get("loudcaps.guided")) $("#guide").hidden = false;
 }
 $("#wBack").onclick = () => { token++; resetWorker(); keepAwake(false); go("home"); };
@@ -3716,15 +3896,24 @@ async function doExport(mode = "video") {
   try {
     keepAwake(true);
     const capsOnly = mode !== "video", bgCol = mode === "green" ? "#00FF00" : mode === "blue" ? "#0000FF" : null;
+    // low on space? then export at the smaller size instead of failing half-way (a 4K "Original" can be several hundred MB)
+    let QL = APP.quality;
+    if (!capsOnly && QL !== "standard") {
+      try {
+        const qe = await navigator.storage.estimate(), free = (qe.quota || 0) - (qe.usage || 0);
+        const est = Math.max((currentFile && currentFile.size) || 0, 2e6 * D0 / 8) * 1.3 * (QL === "max" ? 1.4 : 1);
+        if (qe.quota && free < est * 1.4 + 1e8) { QL = "standard"; logProblem(`low space (${mb(free)} free, need about ${mb(est)}): exported at the smaller size`); toast(`Your phone is low on space (${mb(free)} free), so this export is the smaller size. Free some up in Settings to export at full quality.`, true); }
+      } catch {}
+    }
     // "Original" and "Max" keep the video's own size; "Smaller file" and captions-only stop at 1080p
-    const keepSize = !capsOnly && APP.quality !== "standard";
+    const keepSize = !capsOnly && QL !== "standard";
     const vw = videoDims.w, vh = videoDims.h, scl = Math.min(1, (keepSize ? 3840 : 1920) / Math.max(vw, vh));
     const ow = Math.max(2, Math.round(vw * scl / 2) * 2), oh = Math.max(2, Math.round(vh * scl / 2) * 2);
     try { const f = FONT[SS.font]; await document.fonts.load(`${f ? f.w : 400} 60px "${f ? f.css : "Impact"}"`); if (!isPro()) await document.fonts.load('400 40px "Anton"'); } catch {}
     const cnv = el("canvas"); cnv.width = ow; cnv.height = oh;
     const ctx = cnv.getContext("2d");
     const groups = groupWords(W, SS.words, SS.smart, INFO.gap, SS);
-    const bitrate = BITRATE[APP.quality === "max" && !isPro() ? "high" : APP.quality] || 12e6;
+    const bitrate = BITRATE[QL === "max" && !isPro() ? "high" : QL] || 12e6;
     const stem = (job.name || "video").replace(/\.[^.]+$/, "");
     const capName = capsOnly ? `${stem} - captions only (${mode === "clear" ? "see-through" : mode + " screen"})` : "";
     const finishCaps = async (r, how) => {
@@ -3743,7 +3932,7 @@ async function doExport(mode = "video") {
     if (currentFile && !/webm|matroska|mkv/i.test((currentFile.type || "") + currentFile.name)) {
       try {
         const fast = await FX.run({
-          match: !capsOnly && APP.quality !== "standard", boost: APP.quality === "max" && isPro() ? 1.4 : 1, bg: bgCol, noAudio: capsOnly,
+          match: !capsOnly && QL !== "standard", boost: QL === "max" && isPro() ? 1.4 : 1, bg: bgCol, noAudio: capsOnly,
           file: currentFile, outW: ow, outH: oh, dispW: vw, dispH: vh, bitrate: capsOnly ? 8e6 : bitrate,
           drawOverlay: (c, t) => { drawFrame(c, vw, vh, groups, t, SS); drawWatermark(c, vw, vh, t); },
           onProgress: (done, left) => { if (view === "result") resultProgress(Math.min(0.97, done * 0.97), done >= 1 ? "Putting the finished video together…" : "Using your phone's video chip, so it's much faster than the video's length. Keep Cool Caps open.", left == null ? null : left + 1, done >= 1 ? "Step 2 of 2 · Saving your video" : "Step 1 of 2 · Adding your captions"); },
