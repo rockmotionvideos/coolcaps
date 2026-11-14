@@ -498,6 +498,10 @@ body.is-pro .probadge { display: none; }
 @keyframes drop { from { transform: translate(-50%, -12px); opacity: 0; } }
 .toast.err { background: var(--danger); color: #1B0505; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.tw.cutw { text-decoration: line-through; opacity: .45; }
+.trimcard { margin-bottom: 12px; }
+.trimcard .btnrow { margin-top: 10px; display: flex; gap: 8px; }
+.trimcard .btnrow .btn { flex: 1; }
 </style>
 </head>
 <body>
@@ -789,6 +793,12 @@ body.is-pro .probadge { display: none; }
 
         <div class="tpane" data-pane="text" hidden>
           <div class="phead"><b>Transcript</b><span>One row per caption screen. ▶ plays it, tap a word to fix it, tap the emoji box to change it.</span></div>
+          <div class="grp trimcard">
+            <div class="inline-row"><div><b>Remove ums and pauses ✂️</b><span id="trimNote">Cuts them out of the picture and the sound, so the video gets shorter.</span></div><button class="switch" id="trimSw" role="switch" aria-label="Remove ums and pauses"></button></div>
+            <div class="btnrow" id="trimSeg" hidden>
+              <button class="btn small" data-v="gentle">Long pauses</button><button class="btn small" data-v="normal">Most pauses</button><button class="btn small" data-v="tight">Every pause</button>
+            </div>
+          </div>
           <button class="btn ghost block" id="editText"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit as text</button>
           <div class="screens" id="transcript"></div>
         </div>
@@ -975,6 +985,7 @@ function proNeeds() {
   if (S.loud) r.push({ k: "loud", t: "Loud mode" });
   if (S.bursts) r.push({ k: "bursts", t: "Emoji bursts" });
   if (m && m.translated) r.push({ k: "tr", t: "English translation" });
+  if (TRIM.on) r.push({ k: "trim", t: "Remove ums and pauses" });
   return r;
 }
 const PRO_PERKS = [`Unlimited fast cloud captions (Free: ${FREE_CLOUD_DAY} videos a day)`, `Videos of any length (Free: up to ${FREE_SECS} seconds)`, `All ${PRO.size} Trendy and Kinetic animations`, "Loud mode and Emoji bursts", "Translate captions into English", "No Cool Caps badge on your videos", "Max quality exports"];
@@ -1617,7 +1628,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.9 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "6.0 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -1643,7 +1654,45 @@ async function boot() {
 }
 function persist() { if (APP.remember) store.set("loudcaps.settings", S); }
 
+/* ===================== remove ums and pauses ===================== */
+const TRIM = { on: false, level: "normal", keep: null, cuts: [], removed: 0, nFill: 0, nPause: 0 };
+// [shortest silence worth cutting, silence left behind]. Generous on purpose: the timings of words are a little fuzzy, and a cut should never bite into speech.
+const TRIM_LEVELS = { gentle: [0.8, 0.5], normal: [0.55, 0.35], tight: [0.4, 0.25] };
+const FILLER_RE = /^(?:u+h*m+|u+h+|e+h*m+|e+r+m*|e+h+|h+m+|m{2,}|a+h+m+|euh+|ehm+)$/;
+const isFiller = (w) => FILLER_RE.test(String(w.word).toLowerCase().replace(/^[^\p{L}]+|[^\p{L}]+$/gu, ""));
+function computeCuts() {
+  const dur = (job && job.duration) || (video && video.duration) || 0;
+  Object.assign(TRIM, { keep: null, cuts: [], removed: 0, nFill: 0, nPause: 0 });
+  if (!TRIM.on || !words.length || !dur) return;
+  const [thr, pad] = TRIM_LEVELS[TRIM.level] || TRIM_LEVELS.normal;
+  const real = words.filter((w) => !isFiller(w)), fill = words.filter(isFiller), cuts = [];
+  if (!real.length) return;
+  const fillIn = (a, b) => fill.filter((f) => f.start >= a - 0.05 && f.end <= b + 0.05).length;
+  const lead = fillIn(0, real[0].start);
+  if (lead && real[0].start > pad + 0.1) { cuts.push([Math.max(0, fill[0].start - 0.02), real[0].start - pad / 2]); TRIM.nFill += lead; }
+  for (let i = 0; i + 1 < real.length; i++) {
+    const a = real[i].end, b = real[i + 1].start, gap = b - a, n = fillIn(a, b);
+    if (gap >= thr || (n && gap > pad + 0.1)) { cuts.push([a + pad / 2, b - pad / 2]); TRIM.nFill += n; if (!n) TRIM.nPause++; }
+  }
+  const ok = cuts.map(([a, b]) => [Math.max(0, a), Math.min(dur, b)]).filter(([a, b]) => b - a >= 0.12).sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const c of ok) { const l = merged[merged.length - 1]; if (l && c[0] <= l[1] + 0.02) l[1] = Math.max(l[1], c[1]); else merged.push([...c]); }
+  const keep = []; let at = 0;
+  for (const [a, b] of merged) { if (a > at) keep.push([at, a]); at = b; }
+  if (at < dur) keep.push([at, dur]);
+  TRIM.cuts = merged; TRIM.keep = keep; TRIM.removed = merged.reduce((x, c) => x + c[1] - c[0], 0);
+}
+const cutAt = (t) => { for (const c of TRIM.cuts) { if (t < c[0]) return null; if (t < c[1]) return c; } return null; };
+function syncTrim() {
+  const sw = $("#trimSw"); if (!sw) return;
+  sw.setAttribute("aria-checked", TRIM.on); $("#trimSeg").hidden = !TRIM.on;
+  $$("#trimSeg button").forEach((b) => { const on = b.dataset.v === TRIM.level; b.classList.toggle("primary", on); b.classList.toggle("ghost", !on); });
+  $("#trimNote").textContent = !TRIM.on ? "Cuts them out of the picture and the sound, so the video gets shorter."
+    : TRIM.removed < 0.2 ? "Nothing to cut in this video. Try \"Every pause\" to cut shorter gaps too."
+    : `Cuts ${TRIM.removed.toFixed(1)}s from the video: ${TRIM.nPause} pause${TRIM.nPause === 1 ? "" : "s"}${TRIM.nFill ? ` and ${TRIM.nFill} um${TRIM.nFill === 1 ? "" : "s"}` : ""}. ${{ gentle: "Only the long gaps (about 1 second or more).", normal: "Gaps of about half a second or more.", tight: "Even short gaps, for a fast, punchy video." }[TRIM.level]} Play it to check.`;
+}
 function refreshAll(regroup) {
+  if (TRIM.on) { computeCuts(); syncTrim(); }
   if (main && words.length) { main.set(words, S, videoDims.w, videoDims.h); if (regroup) buildTranscript(); }
   minis.forEach((m) => m.cap.set(m.words, m.settings(), m.vw, m.vh));
   if (hero) hero.cap.set(hero.words, heroSettings(), 1080, 1350);
@@ -2060,6 +2109,12 @@ function buildSettings() {
   }));
   $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
+  $("#trimSw").onclick = () => {
+    if (!words.length) return toast("Make your captions first.", true);
+    TRIM.on = !TRIM.on; computeCuts(); syncTrim(); refreshAll(true);
+    if (TRIM.on && TRIM.removed >= 0.2 && video.duration && video.paused) toast(`Cuts ${TRIM.removed.toFixed(1)}s. Tap play to see it.`);
+  };
+  $$("#trimSeg button").forEach((b) => (b.onclick = () => { TRIM.level = b.dataset.v; APP.trimLevel = TRIM.level; saveApp(); computeCuts(); syncTrim(); refreshAll(false); }));
   $("#fixClear").onclick = (e) => { const b = e.currentTarget; if (!Object.keys(APP.fixes || {}).length) return toast("Nothing to clear"); if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Sure?"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Clear"; }, 4000); return; } b.dataset.sure = ""; b.textContent = "Clear"; APP.fixes = {}; saveApp(); syncSettings(); toast("Spellings cleared"); };
   $("#mixSw").onclick = () => { APP.mixAuto = APP.mixAuto === false; saveApp(); syncSettings(); toast(APP.mixAuto ? "Language switches will be caught" : "One language per video"); };
   $("#mixBtn").onclick = () => openSheet((sh) => {
@@ -2779,6 +2834,7 @@ try { navigator.storage.getDirectory().then((d) => d.removeEntry("working-video"
 async function startFile(file) {
   const my = ++token;
   words = []; history = []; job = null; lastWord = lastRow = -1;
+  TRIM.on = false; TRIM.keep = null; TRIM.cuts = []; TRIM.removed = 0; try { syncTrim(); } catch {}
   $("#transcript").textContent = ""; $("#langBar").hidden = true;
   if (objectURL) { URL.revokeObjectURL(objectURL); objectURL = null; video.removeAttribute("src"); video.load(); }
   warmUp();
@@ -3172,6 +3228,8 @@ video.addEventListener("loadedmetadata", () => { $("#scrub").max = video.duratio
 // the preview can trip over itself on phones (the video chip is busy, or memory is tight): quietly restart it where it was
 let pvTime = 0, pvPlaying = false, pvTries = 0, pvFor = null, pvBusy = false;
 video.addEventListener("timeupdate", () => { if (!video.error && video.currentTime > 0) pvTime = video.currentTime; });
+// Remove ums and pauses: while playing, jump over the parts that will be cut
+setInterval(() => { if (TRIM.on && TRIM.cuts.length && !video.paused && !video.seeking) { const c = cutAt(video.currentTime); if (c) video.currentTime = Math.min(c[1] + 0.001, video.duration || c[1]); } }, 40);
 video.addEventListener("playing", () => { pvPlaying = true; });
 video.addEventListener("pause", () => { if (!video.error) pvPlaying = false; });
 function restartPreview(at, play, wait = 0) {
@@ -3269,7 +3327,7 @@ function buildTranscript() {
     play.onclick = () => { if (!video.duration) return; video.currentTime = gs; video.play().catch(() => {}); playUntil = ge; };
     const box = el("div", "sw2"); box.append(el("span", "st", fmt(gs)));
     const ws = el("div", "ws");
-    g.forEach(() => { const i = idx++, w = words[i]; const b = el("button", "tw" + (w.edited ? " edited" : "") + (w.spoiler ? " spoil" : ""), w.word); b.dataset.i = i; b.onclick = () => editWord(i); ws.append(b); });
+    g.forEach(() => { const i = idx++, w = words[i]; const b = el("button", "tw" + (w.edited ? " edited" : "") + (w.spoiler ? " spoil" : "") + (TRIM.on && isFiller(w) ? " cutw" : ""), w.word); b.dataset.i = i; b.onclick = () => editWord(i); ws.append(b); });
     const to = idx - 1;
     const pick = groupEmoji(g, S);
     const em = el("button", "em" + (pick ? " has" : ""), pick ? pick.e : "+"); em.title = "Emoji for this screen"; em.setAttribute("aria-label", "Change emoji");
@@ -3632,7 +3690,7 @@ const FX = (() => {
   }
 
   /* ---------- the export itself ---------- */
-  async function run({ file, outW, outH, dispW, dispH, bitrate, drawOverlay, onProgress, cancelled, match = false, boost = 1, bg = null, noAudio = false }) {
+  async function run({ file, outW, outH, dispW, dispH, bitrate, drawOverlay, onProgress, cancelled, match = false, boost = 1, bg = null, noAudio = false, cuts = null }) {
     if (!("VideoDecoder" in window && "VideoEncoder" in window && "VideoFrame" in window)) throw new Error("no webcodecs");
     const { b, box: moov } = await readMoov(file);
     const tracks = kids(b, moov.start + moov.hdr, moov.end).filter((k) => k.type === "trak").map((t) => parseTrack(b, t)).filter(Boolean);
@@ -3649,6 +3707,22 @@ const FX = (() => {
     const srcBps = Array.prototype.reduce.call(vt.sizes, (a, x) => a + x, 0) * 8 / Math.max(0.1, vdurSec);
     const packed = /^(hvc1|hev1|dvh|av01|vp09)/.test(dcfg.codec);
     const pickRate = () => { const big = Math.max(outW, outH) > 1920; return Math.round(Math.min((big ? 55e6 : 30e6) * boost, Math.max(bitrate, srcBps * (packed ? 1.5 : 1.1) * boost))); };
+    // Remove ums and pauses: only the "keep" stretches are used. They're snapped to the sound's frame grid
+    // (about 21 ms) so the picture and the sound stay exactly in step after every cut.
+    let keepR = null;
+    if (cuts && cuts.length) {
+      const pk = at && at.entry && !noAudio && at.durs && at.durs.length ? at.durs[0] / at.timescale : 0;
+      keepR = [];
+      for (let [a, b] of cuts) { if (pk) { a = Math.ceil(a / pk - 1e-6) * pk; b = Math.floor(b / pk + 1e-6) * pk; } if (b - a >= 0.08) keepR.push([a, b]); }
+      if (!keepR.length) keepR = null;
+    }
+    // where a moment in the original lands in the new video, plus the end of the stretch it sits in (null = it was cut out)
+    const mapR = (t) => {
+      if (!keepR) return [t, Infinity];
+      let cum = 0;
+      for (const [a, b] of keepR) { if (t < a - 1e-6) return null; if (t < b - 1e-6) return [cum + (t - a), b]; cum += b - a; }
+      return null;
+    };
     // pick an H.264 profile the phone can encode at this size; if it can't do the full size, step down to 1080p
     let ecfg = null;
     for (let pass = 0; pass < 2 && !ecfg; pass++) {
@@ -3688,6 +3762,7 @@ const FX = (() => {
       output: (frame) => {
         try {
           const t = frame.timestamp / 1e6;
+          const mp = mapR(t); if (!mp) return;   // this moment was cut out
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, outW, outH); }  // captions only: a plain colour instead of the video
           else if (rot === 90) { ctx.translate(outW, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(frame, 0, 0, outH, outW); }
@@ -3697,7 +3772,7 @@ const FX = (() => {
           ctx.setTransform(outW / dispW, 0, 0, outH / dispH, 0, 0);
           drawOverlay(ctx, t);
           if (!thumb && t >= Math.min(vdurSec * 0.3, 3)) { const c = document.createElement("canvas"); c.width = 180; c.height = Math.round(180 * outH / outW); c.getContext("2d").drawImage(cnv, 0, 0, c.width, c.height); thumb = c.toDataURL("image/jpeg", 0.72); }
-          const vf = new VideoFrame(cnv, { timestamp: frame.timestamp, duration: frame.duration || Math.round(1e6 / fps) });
+          const vf = new VideoFrame(cnv, { timestamp: Math.round(mp[0] * 1e6), duration: frame.duration || Math.round(1e6 / fps) });
           encoder.encode(vf, { keyFrame: made % keyEvery === 0 });
           vf.close(); made++;
           if (made % 5 === 0) { const el2 = (performance.now() - t0) / 1000, done = Math.min(1, t / vdurSec); onProgress(done, done > 0.03 ? el2 / done - el2 : null); }
@@ -3734,18 +3809,23 @@ const FX = (() => {
     const movieMs = Math.round(vTotal * 1000 / VTS);
 
     let aIdx = [];
+    const aT = [];   // when each sound frame plays in the new video (seconds)
     if (at && at.entry && !noAudio) {
       const aMin = at.dts[0], limit = (vTotal / VTS) * at.timescale + aMin;
-      for (let i = 0; i < at.n; i++) if (at.dts[i] < limit) aIdx.push(i);
+      for (let i = 0; i < at.n; i++) {
+        const t0 = (at.dts[i] - aMin) / at.timescale;
+        if (keepR) { const mp = mapR(t0 + 1e-6); if (mp && t0 + at.durs[i] / at.timescale <= mp[1] + 1e-4) { aIdx.push(i); aT.push(mp[0]); } }
+        else if (at.dts[i] < limit) { aIdx.push(i); aT.push(t0); }
+      }
     }
     const ftyp = box("ftyp", enc.encode("isom"), U32(0x200), enc.encode("isomiso2avc1mp41"));
     // lay picture and sound side by side in half-second slices. Players (and apps you share to) stall on
     // files that keep all the picture first and all the sound last, because they have to jump around the file.
     const order = [];
-    { const aMin = aIdx.length ? at.dts[0] : 0; let vi = 0, ai = 0, T = 0.5;
+    { let vi = 0, ai = 0, T = 0.5;
       while (vi < out.length || ai < aIdx.length) {
         while (vi < out.length && vDts[vi] / VTS < T) order.push([0, vi++]);
-        while (ai < aIdx.length && (at.dts[aIdx[ai]] - aMin) / at.timescale < T) order.push([1, ai++]);
+        while (ai < aIdx.length && aT[ai] < T) order.push([1, ai++]);
         T += 0.5;
       } }
     const build = (mdatStart) => {
@@ -3773,7 +3853,7 @@ const FX = (() => {
     // audio: copy the original compressed sound straight across (no re-encoding, no quality loss)
     const aread = reader(file);
     for (const [k, i] of order) parts.push(k === 0 ? out[i].data : (await aread(at.offsets[aIdx[i]], at.sizes[aIdx[i]])).slice());
-    return { blob: new Blob(parts, { type: "video/mp4" }), thumb, seconds: (performance.now() - t0) / 1000, codec: dcfg.codec, rot, outW, outH, bitrate: ecfg.bitrate, srcBps };
+    return { blob: new Blob(parts, { type: "video/mp4" }), thumb, seconds: (performance.now() - t0) / 1000, codec: dcfg.codec, rot, outW, outH, bitrate: ecfg.bitrate, srcBps, cutSecs: keepR ? Math.max(0, vdurSec - keepR.reduce((x, r) => x + r[1] - r[0], 0)) : 0 };
   }
   /* ---------- sound for transcribing: pull just the audio track out of the file ----------
      Much lighter than loading the whole video into memory, which phones often refuse for long or 4K videos. */
@@ -3979,7 +4059,9 @@ async function doExport(mode = "video") {
   resetWorker();  // the speech engine isn't needed while exporting: free its memory for the video
   const D0 = (job && job.duration) || video.duration || 0;
   resultProgress(0, "Getting your video ready…", null, "Step 1 of 2 · Getting ready");
-  const SS = { ...S }, W = words.map((w) => ({ ...w }));
+  const SS = { ...S }, cutKeep = TRIM.on && TRIM.keep ? TRIM.keep.map((r) => [...r]) : null, cutList = cutKeep ? TRIM.cuts.map((r) => [...r]) : [];
+  const W = words.filter((w) => !(cutKeep && isFiller(w))).map((w) => ({ ...w }));
+  if (!W.length) { exporting = false; $("#exportBtn").disabled = false; $("#exportMore").disabled = false; go("editor"); return toast("No words left to caption.", true); }
   try {
     keepAwake(true);
     const capsOnly = mode !== "video", bgCol = mode === "green" ? "#00FF00" : mode === "blue" ? "#0000FF" : null;
@@ -4020,7 +4102,7 @@ async function doExport(mode = "video") {
     if (currentFile && !/webm|matroska|mkv/i.test((currentFile.type || "") + currentFile.name)) {
       try {
         const runFast = (safe) => FX.run({
-          match: !safe && !capsOnly && QL !== "standard", boost: !safe && QL === "max" && isPro() ? 1.4 : 1, bg: bgCol, noAudio: capsOnly,
+          match: !safe && !capsOnly && QL !== "standard", boost: !safe && QL === "max" && isPro() ? 1.4 : 1, bg: bgCol, noAudio: capsOnly, cuts: capsOnly ? null : cutKeep,
           file: currentFile, outW: ow, outH: oh, dispW: vw, dispH: vh, bitrate: capsOnly ? 8e6 : safe ? Math.min(bitrate, 12e6) : bitrate,
           drawOverlay: (c, t) => { drawFrame(c, vw, vh, groups, t, SS); drawWatermark(c, vw, vh, t); },
           onProgress: (done, left) => { if (view === "result") resultProgress(Math.min(0.97, done * 0.97), done >= 1 ? "Putting the finished video together…" : "Using your phone's video chip, so it's much faster than the video's length. Keep Cool Caps open.", left == null ? null : left + 1, done >= 1 ? "Step 2 of 2 · Saving your video" : "Step 1 of 2 · Adding your captions"); },
@@ -4040,7 +4122,7 @@ async function doExport(mode = "video") {
         console.info(`fast export: ${fast.seconds.toFixed(1)}s, ${fast.codec}, rotation ${fast.rot}`);
         freeVideo(v);  // hand the phone's video chip back before the finished video starts playing
         item.kept = await keepInLibrary(item);
-        logProblem(`export ok · fast ${fast.seconds.toFixed(1)}s · ${fast.codec} · ${mb(item.size)} · ${fast.outW}x${fast.outH} of ${vw}x${vh} · ${(fast.bitrate / 1e6).toFixed(1)} of ${(fast.srcBps / 1e6).toFixed(1)} Mbps · library ${item.kept ? "saved" : "NOT saved"}`);
+        logProblem(`export ok · fast ${fast.seconds.toFixed(1)}s${fast.cutSecs ? ` · cut ${fast.cutSecs.toFixed(1)}s` : ""} · ${fast.codec} · ${mb(item.size)} · ${fast.outW}x${fast.outH} of ${vw}x${vh} · ${(fast.bitrate / 1e6).toFixed(1)} of ${(fast.srcBps / 1e6).toFixed(1)} Mbps · library ${item.kept ? "saved" : "NOT saved"}`);
         showDone(item);
         return;
       } catch (err) {
@@ -4064,6 +4146,7 @@ async function doExport(mode = "video") {
     let thumb = null, lastUi = 0;
     const makeThumb = () => { const c = el("canvas"); c.width = 180; c.height = Math.round(180 * oh / ow); c.getContext("2d").drawImage(cnv, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.72); };
     const draw = () => {
+      if (cutList.length && !capsOnly && !v.seeking) { const c = cutList.find((r) => v.currentTime >= r[0] && v.currentTime < r[1]); if (c) v.currentTime = Math.min(c[1] + 0.001, dur); }
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(v, 0, 0, ow, oh);
       ctx.setTransform(scl, 0, 0, scl, 0, 0); drawFrame(ctx, vw, vh, groups, v.currentTime, SS); drawWatermark(ctx, vw, vh, v.currentTime);
       if (!thumb && v.currentTime > Math.min(dur * 0.3, 3)) thumb = makeThumb();
