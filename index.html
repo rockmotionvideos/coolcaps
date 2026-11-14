@@ -603,6 +603,11 @@ body.is-pro .probadge { display: none; }
             <button class="btn ghost small" id="mixBtn">Choose</button>
           </div>
           <div class="row">
+            <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/></svg></span>
+            <span class="rt"><b>My spellings</b><span id="fixNote">None yet</span></span>
+            <button class="btn ghost small" id="fixClear">Clear</button>
+          </div>
+          <div class="row">
             <span class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span>
             <span class="rt"><b>Catch language switches</b><span>If a second language is spoken in the video, caption each part in its own language. Slower and warmer, so turn it off if your phone struggles.</span></span>
             <button class="switch" id="mixSw" role="switch" aria-label="Catch language switches"></button>
@@ -1526,7 +1531,7 @@ const DEFAULTS = {
 };
 const LOOK_RESET = { outline: "medium", outline_color: "#000000", shadow: "soft", glow: false, bg: "off" };
 const lookFor = (style) => { const l = STYLE_LOOKS[style] || {}; return { ...LOOK_RESET, ...l, font: validFont(l.font) }; };
-const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same", vad: true, cloud: true, mix: [], mixAuto: true };
+const APP_DEFAULTS = { model: "small", lang: "", quality: "high", remember: true, engine: "cpu", out: "same", vad: true, cloud: true, mix: [], mixAuto: true, fixes: {} };
 let S = { ...DEFAULTS }, APP = { ...APP_DEFAULTS };
 let words = [], history = [], job = null, view = "home", tool = "style", videoDims = { w: 1080, h: 1920 };
 const store = {
@@ -1612,7 +1617,7 @@ const STANDALONE = matchMedia("(display-mode: standalone)").matches || navigator
 const FAKE = /[?&]fake=1/.test(location.search);  // test mode: uses words.json instead of Whisper
 async function boot() {
   INFO = {
-    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.7 (phone)",
+    fonts: CAPTION_FONTS, default_font: "poppins", gap: 0.6, version: "5.8 (phone)",
     colors: { white: "#FFFFFF", black: "#000000", yellow: "#FFE600", green: "#39FF14", red: "#FF3B30", pink: "#FF2D95", purple: "#8B3DFF", blue: "#2F80FF", cyan: "#00E5FF", orange: "#FF8A00" },
   };
   INFO.fonts.forEach((f) => (FONT[f.key] = f));
@@ -2055,6 +2060,7 @@ function buildSettings() {
   }));
   $$("#engSeg button").forEach((b) => (b.onclick = () => { APP.engine = b.dataset.v; saveApp(); resetWorker(); }));
   $$("#qSeg button").forEach((b) => (b.onclick = () => { if (b.dataset.v === "max" && !isPro()) return paywall("max"); APP.quality = b.dataset.v; saveApp(); }));
+  $("#fixClear").onclick = (e) => { const b = e.currentTarget; if (!Object.keys(APP.fixes || {}).length) return toast("Nothing to clear"); if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Sure?"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Clear"; }, 4000); return; } b.dataset.sure = ""; b.textContent = "Clear"; APP.fixes = {}; saveApp(); syncSettings(); toast("Spellings cleared"); };
   $("#mixSw").onclick = () => { APP.mixAuto = APP.mixAuto === false; saveApp(); syncSettings(); toast(APP.mixAuto ? "Language switches will be caught" : "One language per video"); };
   $("#mixBtn").onclick = () => openSheet((sh) => {
     const set = new Set(APP.mix || []), common = ["ar", "en", "fr", "es", "hi", "ru", "tr", "pt", "de", "it", "fa", "he"];
@@ -2132,6 +2138,7 @@ function syncSettings() {
   $("#langSel").value = APP.lang; $("#rememberSw").setAttribute("aria-checked", APP.remember);
   $("#mixSw").setAttribute("aria-checked", APP.mixAuto !== false);
   $("#mixNote").textContent = (APP.mix || []).length >= 2 ? (APP.mix.map(langName).join(" + ") + (APP.lang ? ". Used when the spoken language is Auto-detect." : "")) : "Off. Pick 2 or 3 if you switch languages in one video (like Arabic and English).";
+  { const n = Object.keys(APP.fixes || {}).length; $("#fixNote").textContent = n ? `${n} word${n > 1 ? "s" : ""} the app now spells your way in every new video. Taught from "Edit words".` : "None yet. When you fix a word in Edit words, tap \"always spell it this way\" and the app remembers."; }
   showSpace();
 }
 
@@ -2610,11 +2617,16 @@ function warmUp() {
   } catch {}
 }
 // Tidy Arabic-script words: drop vowel marks and stretching, and fix Persian look-alike letters the model sometimes mixes in
+const fixKey = (t) => String(t).replace(/[\u064b-\u065f\u0670\u0640]/g, "").toLowerCase();
 function cleanWords(ws) {
+  const fx = APP.fixes || {};
   return (ws || []).map((w) => {
-    if (!/[\u0600-\u06ff]/.test(w.word)) return w;
-    const t = w.word.replace(/[\u064b-\u065f\u0670\u0640]/g, "").replace(/\u06cc/g, "\u064a").replace(/\u06a9/g, "\u0643").replace(/\u06c0/g, "\u0647");
-    return t === w.word ? w : { ...w, word: t || w.word };
+    let word = w.word;
+    if (/[\u0600-\u06ff]/.test(word)) word = word.replace(/[\u064b-\u065f\u0670\u0640]/g, "").replace(/\u06cc/g, "\u064a").replace(/\u06a9/g, "\u0643").replace(/\u06c0/g, "\u0647") || w.word;
+    // spellings the person taught the app ("always use this")
+    const m = word.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u);
+    if (m && m[2] && fx[fixKey(m[2])]) word = m[1] + fx[fixKey(m[2])] + m[3];
+    return word === w.word ? w : { ...w, word };
   });
 }
 function transcribe(audio, onStatus, opts2 = {}) {
@@ -2960,7 +2972,9 @@ function cloudPost(blob, fields, onUp) {
 }
 const langCode = (name) => { const n = String(name || "").toLowerCase(); if (!n) return ""; if (LANGS.some((l) => l[0] === n)) return n; const f = LANGS.find((l) => l[1].toLowerCase() === n); return f ? f[0] : ""; };
 // a few everyday Lebanese phrases: sent along when the language is Arabic so the words come back spelled the way it's spoken
-const ARABIC_PROMPT = "مرحبا، كيفك؟ شو أخبارك؟ هلق رح نحكي عن الموضوع، بس لحظة. تمام، يلا منبلش.";
+const ARABIC_PROMPT = "أهلين، كيفك؟ منيح الحمدلله، إنت كيفك؟ شو عم تعمل هلق؟ والله ما بعرف، بدي روح عالبيت لأنو تعبان كتير. تعا لهون، شو بدك تاكل؟ يلا ماشي، منحكي بعدين. بكرا إن شاء الله منتلاقى.";
+// the way many Lebanese speakers really talk: Arabic with English and French words dropped in (kept in their own letters)
+const ARABIC_MIX_PROMPT = "أهلين شباب، اليوم رح نحكي عن الـ video الجديد. هلق منعمل edit وبعدين منحط الـ captions، وكتير حلو إذا عملتوا share عالـ TikTok وInstagram. Merci كتير، ça va؟ bye!";
 // cut the sound into pieces of about `secs`, each ending at a quiet moment so no word is chopped
 function cloudPieces(audio, secs) {
   const SR = 16000, T = secs * SR, out = []; let pos = 0;
@@ -2989,7 +3003,7 @@ async function cloudTranscribe(audio, onStatus, { language, translate, mix = [],
     const ask = async (lg) => {
       const wait = 3100 - (performance.now() - lastReq); if (lastReq && wait > 0) await sleep(wait);   // the free plan allows about 20 requests a minute
       lastReq = performance.now();
-      return cloudPost(blob, { language: lg, task: translate ? "translate" : "", prompt: lg === "ar" && !translate ? ARABIC_PROMPT : "" }, (f) => {
+      return cloudPost(blob, { language: lg, task: translate ? "translate" : "", prompt: lg === "ar" && !translate ? ((language === "ar" && mix.length < 2) ? ARABIC_PROMPT : ARABIC_MIX_PROMPT) : "" }, (f) => {
         if (f < 1 && pieces.length === 1) onStatus({ pct: f, stage: "Sending the sound" + tag, note: `${mbs} MB · it's sent securely to write the captions. We don't keep it.`, cancel: true });
       });
     };
@@ -3000,7 +3014,7 @@ async function cloudTranscribe(audio, onStatus, { language, translate, mix = [],
       // heard a language that isn't one of the person's own? ask again with the one they were just speaking
       if (!language && mix.length >= 2 && got && !mix.includes(got)) { got = last || mix[0]; d = await ask(got); }
       // Arabic heard on its own: ask once more with the dialect sample, so it's spelled the way it's spoken
-      else if (!language && !translate && got === "ar" && mix.length < 2) { d = await ask("ar"); }
+      else if (!language && !translate && got === "ar") { d = await ask("ar"); }
     } finally { clearInterval(tick); }
     got = got || last || lang; if (got) { last = got; if (!lang) lang = got; seen[got] = (seen[got] || 0) + 1; }
     for (const w of d.words || []) if (String(w.word).trim()) words.push({ word: String(w.word).trim(), start: +w.start + off / SR, end: +w.end + off / SR, lang: got || undefined });
@@ -3313,6 +3327,16 @@ function editWord(i, adding = false) {
       const spl = el("button", "btn ghost block", w.spoiler ? "👀 Show this word again" : "🙈 Hide as a spoiler");
       spl.onclick = () => { snapshot(); words[i] = { ...words[i], spoiler: !w.spoiler }; if (!words[i].spoiler) delete words[i].spoiler; closeSheet(); refreshAll(true); toast(words[i].spoiler ? "Hidden. It'll be revealed in a big pop at the end" : "Word shown again"); };
       sh.append(spl);
+      const always = el("button", "btn ghost block", "✓ Save, and always spell it this way");
+      always.onclick = () => {
+        const t = inp.value.trim();
+        if (!t || /\s/.test(t) || fixKey(t) === fixKey(w.word)) return toast("Type one corrected word first.", true);
+        APP.fixes = APP.fixes || {};
+        if (Object.keys(APP.fixes).length >= 300) delete APP.fixes[Object.keys(APP.fixes)[0]];
+        APP.fixes[fixKey(w.word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))] = t; saveApp(); syncSettings();
+        toast(`Next time "${w.word}" will be written "${t}"`); save();
+      };
+      sh.append(always);
       const d = el("button", "btn danger", "Delete"); d.onclick = del;
       const a = el("button", "btn ghost", "Add after"); a.onclick = () => editWord(i, true);
       row.append(d, a);
